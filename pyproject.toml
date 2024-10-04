@@ -1,0 +1,9 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "function_encoder_torch"
+version = "0.0.1"
+description = "Function encoder implementation in PyTorch."
+readme = "README.md"

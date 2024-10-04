@@ -1,0 +1,3 @@
+# Function Encoder
+
+Function encoders merge the flexibility of neural network models with the structure and formalism of kernel methods. Function encoders learn a set of basis functions parameterized by neural networks to span a Hilbert space of functions. The functions in the Hilbert space can be represented by a linear combination of the basis functions, and the coefficients of the linear combination "encode" the function. 
