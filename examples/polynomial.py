@@ -46,8 +46,8 @@ with tqdm.tqdm(range(epochs)) as tqdm_bar:
         for batch in dataloader:
 
             X, y = batch["X"].to(device), batch["y"].to(device)
-            X = X.unsqueeze(1)  # Fix for 1D input
-            y = y.unsqueeze(1)  # Fix for 1D input
+            X = X.unsqueeze(-1)  # Fix for 1D input
+            y = y.unsqueeze(-1)  # Fix for 1D input
 
             coefficients = model.compute_coefficients(X, y)
             y_hat = model(X, coefficients)
@@ -72,8 +72,8 @@ with tqdm.tqdm(range(epochs)) as tqdm_bar:
 with torch.no_grad():
 
     point = ds["train"][0]
-    example_X = point["X"].unsqueeze(1)  # Fix for 1D input
-    example_y = point["y"].unsqueeze(1)  # Fix for 1D input
+    example_X = point["X"].unsqueeze(-1)  # Fix for 1D input
+    example_y = point["y"].unsqueeze(-1)  # Fix for 1D input
 
     # Add leading batch dimension
     example_X = example_X.unsqueeze(0)

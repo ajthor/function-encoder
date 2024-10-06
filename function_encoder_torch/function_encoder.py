@@ -23,9 +23,7 @@ class FunctionEncoder(torch.nn.Module):
         self.inner_product = inner_product
 
     def compute_coefficients(self, x, y):
-        G = torch.cat(
-            [basis(x.unsqueeze(-1)) for basis in self.basis_functions], dim=-1
-        )
+        G = torch.stack([basis(x) for basis in self.basis_functions], dim=-1)
 
         if self.residual_function is not None:
             y_residual = self.residual_function(x)
@@ -38,10 +36,8 @@ class FunctionEncoder(torch.nn.Module):
         return coefficients
 
     def forward(self, x, coefficients):
-        G = torch.cat(
-            [basis(x.unsqueeze(-1)) for basis in self.basis_functions], dim=-1
-        )
-        y = torch.einsum("bdmk,bk->bdm", G, coefficients)
+        G = torch.stack([basis(x) for basis in self.basis_functions], dim=-1)
+        y = torch.einsum("bmdk,bk->bmd", G, coefficients)
 
         if self.residual_function is not None:
             y += self.residual_function(x)
