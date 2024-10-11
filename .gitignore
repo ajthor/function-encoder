@@ -249,3 +249,7 @@ $RECYCLE.BIN/
 
 # End of https://www.toptal.com/developers/gitignore/api/macos,linux,windows,python
 
+runs/
+*.safetensors
+examples/spot_v2d/data/
+examples/spot_v2d/results/
