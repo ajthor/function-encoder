@@ -2,7 +2,7 @@ import torch
 
 
 def monte_carlo_integration(f, g, inner_product):
-    F = torch.einsum("bmdk,bmdl->bmkl", g, f).mean(dim=1)
+    F = torch.einsum("bmdk,bmd->bmk", g, f).mean(dim=1)
 
     coefficients = F
     return coefficients
