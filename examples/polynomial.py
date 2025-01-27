@@ -4,8 +4,8 @@ import torch
 
 from torch.utils.data import DataLoader
 
-from function_encoder_torch.model.mlp import MLP
-from function_encoder_torch.function_encoder import FunctionEncoder
+from function_encoder.model.mlp import MLP
+from function_encoder.function_encoder import FunctionEncoder
 
 import tqdm
 

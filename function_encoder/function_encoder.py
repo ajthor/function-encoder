@@ -2,8 +2,8 @@ from typing import Callable, Optional
 
 import torch
 
-from function_encoder_torch.coefficients import least_squares
-from function_encoder_torch.inner_products import L2
+from function_encoder.coefficients import least_squares
+from function_encoder.inner_products import L2
 
 
 class FunctionEncoder(torch.nn.Module):
