@@ -6,6 +6,7 @@ from torch.utils.data import DataLoader
 
 from function_encoder.model.mlp import MLP, MultiHeadedMLP
 from function_encoder.function_encoder import BasisFunctions, FunctionEncoder
+from function_encoder.losses import basis_normalization_loss
 from function_encoder.utils.training import fit
 
 import tqdm
@@ -29,10 +30,10 @@ dataloader = DataLoader(ds["train"], batch_size=50)
 
 # Create basis functions
 
-# basis_functions = BasisFunctions(
-#     torch.nn.ModuleList([MLP(layer_sizes=[1, 32, 1]) for _ in range(8)])
-# )
-basis_functions = MultiHeadedMLP(layer_sizes=[1, 32, 1], num_heads=8)
+basis_functions = BasisFunctions(
+    torch.nn.ModuleList([MLP(layer_sizes=[1, 32, 1]) for _ in range(8)])
+)
+# basis_functions = MultiHeadedMLP(layer_sizes=[1, 32, 1], num_heads=8)
 
 # Create model
 
@@ -49,14 +50,15 @@ def loss_function(model, batch):
     y = y.unsqueeze(-1)  # Fix for 1D input
 
     coefficients = model.compute_coefficients(X, y)
-    y_hat = model(X, coefficients)
+    y_pred = model(X, coefficients)
 
-    pred_loss = torch.nn.functional.mse_loss(y_hat, y)
+    pred_loss = torch.nn.functional.mse_loss(y_pred, y)
+    norm_loss = basis_normalization_loss(model.basis_functions(X))
 
-    return pred_loss
+    return pred_loss + norm_loss
 
 
-model = fit(model, dataloader, loss_function)
+model = fit(model=model, ds=dataloader, loss_function=loss_function)
 
 
 # Plot results
