@@ -8,5 +8,10 @@ version = "0.0.1"
 description = "Function encoder implementation in PyTorch."
 readme = "README.md"
 
+dependencies = [
+    "torch", 
+    "numpy",
+]
+
 [project.optional-dependencies]
-jax = ["git+https://github.com/ajthor/function-encoder-jax.git"]
+jax = ["function-encoder-jax @ git+https://github.com/ajthor/function-encoder-jax.git"]
