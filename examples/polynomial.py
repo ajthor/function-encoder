@@ -1,33 +1,38 @@
-from datasets import load_dataset
-
 import torch
+
+from datasets import load_dataset
 
 from torch.utils.data import DataLoader
 
-from function_encoder.model.mlp import MLP
-from function_encoder.function_encoder import FunctionEncoder
+from function_encoder.model.mlp import MLP, MultiHeadedMLP
+from function_encoder.function_encoder import BasisFunctions, FunctionEncoder
+from function_encoder.utils.training import fit
 
 import tqdm
 
 import matplotlib.pyplot as plt
 
-device = (
-    "cuda"
-    if torch.cuda.is_available()
-    else "mps" if torch.backends.mps.is_available() else "cpu"
-)
+if torch.cuda.is_available():
+    device = "cuda"
+elif torch.backends.mps.is_available():
+    device = "mps"
+else:
+    device = "cpu"
 
 # Load dataset
 
 ds = load_dataset("ajthor/polynomial")
-ds = ds.with_format("torch")
+ds = ds.with_format("torch", device=device)
 
-dataloader = DataLoader(ds["train"], batch_size=12)
+dataloader = DataLoader(ds["train"], batch_size=50)
 
 
 # Create basis functions
 
-basis_functions = torch.nn.ModuleList([MLP([1, 32, 1]) for _ in range(8)])
+# basis_functions = BasisFunctions(
+#     torch.nn.ModuleList([MLP(layer_sizes=[1, 32, 1]) for _ in range(8)])
+# )
+basis_functions = MultiHeadedMLP(layer_sizes=[1, 32, 1], num_heads=8)
 
 # Create model
 
@@ -37,34 +42,21 @@ model.to(device)
 
 # Train model
 
-epochs = 1000
-optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
 
-with tqdm.tqdm(range(epochs)) as tqdm_bar:
-    for epoch in tqdm_bar:
+def loss_function(model, batch):
+    X, y = batch["X"].to(device), batch["y"].to(device)
+    X = X.unsqueeze(-1)  # Fix for 1D input
+    y = y.unsqueeze(-1)  # Fix for 1D input
 
-        for batch in dataloader:
+    coefficients = model.compute_coefficients(X, y)
+    y_hat = model(X, coefficients)
 
-            X, y = batch["X"].to(device), batch["y"].to(device)
-            X = X.unsqueeze(-1)  # Fix for 1D input
-            y = y.unsqueeze(-1)  # Fix for 1D input
+    pred_loss = torch.nn.functional.mse_loss(y_hat, y)
 
-            coefficients = model.compute_coefficients(X, y)
-            y_hat = model(X, coefficients)
+    return pred_loss
 
-            loss = torch.nn.functional.mse_loss(y_hat, y)
 
-            loss.backward()
-
-            # Backpropagation with gradient accumulation
-            if epoch % 50 == 0:
-                torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
-                optimizer.step()
-                optimizer.zero_grad()
-
-            break
-
-        tqdm_bar.set_postfix_str(f"Loss {loss.item()}")
+model = fit(model, dataloader, loss_function)
 
 
 # Plot results

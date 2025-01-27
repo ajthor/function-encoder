@@ -1,3 +1,5 @@
+from typing import Callable
+
 import torch
 
 import tqdm
@@ -6,22 +8,28 @@ import tqdm
 def fit(
     model,
     ds,
-    loss_function,
-    epochs=100,
+    loss_function: Callable,
+    epochs=1000,
     learning_rate=1e-3,
-    gradient_accumulation_steps=50,
 ):
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
     model.train()
-    for epoch in trange(epochs):
 
-        for i, batch in enumerate(ds):
+    with tqdm.tqdm(range(epochs)) as tqdm_bar:
+        for i, epoch in enumerate(tqdm_bar):
 
-            x, y, _ = batch
+            for batch in ds:
 
-            optimizer.zero_grad()
-            loss = loss_function(model, batch)
-            loss.backward()
-            if i % gradient_accumulation_steps == 0:
+                optimizer.zero_grad()
+
+                loss = loss_function(model, batch)
+                loss.backward()
+
                 optimizer.step()
+
+                break
+
+            if i % 10 == 0:
+                tqdm_bar.set_postfix_str(f"Loss {loss.item()}")
+
     return model
