@@ -9,8 +9,8 @@ description = "Function encoder implementation in PyTorch."
 readme = "README.md"
 
 dependencies = [
-    "torch", 
-    "numpy",
+    "numpy>=1.21.0",
+    "torch>=1.9.0",
 ]
 
 [project.optional-dependencies]
