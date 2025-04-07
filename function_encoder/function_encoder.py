@@ -3,7 +3,7 @@ from typing import Callable, Optional
 import torch
 
 from function_encoder.coefficients import least_squares
-from function_encoder.inner_products import L2
+from function_encoder.inner_products import euclidean_inner_product
 
 
 class BasisFunctions(torch.nn.Module):
@@ -17,12 +17,13 @@ class BasisFunctions(torch.nn.Module):
 
 
 class FunctionEncoder(torch.nn.Module):
+
     def __init__(
         self,
         basis_functions: torch.nn.Module,
         residual_function: Optional[torch.nn.Module] = None,
         coefficients_method: Callable = least_squares,
-        inner_product: Callable = L2,
+        inner_product: Callable = euclidean_inner_product,
     ):
         super(FunctionEncoder, self).__init__()
 
