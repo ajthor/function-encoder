@@ -16,7 +16,7 @@ def fit(
     model.train()
 
     with tqdm.tqdm(range(epochs)) as tqdm_bar:
-        for i, epoch in enumerate(tqdm_bar):
+        for epoch in tqdm_bar:
 
             for batch in ds:
 
@@ -29,7 +29,7 @@ def fit(
 
                 break
 
-            if i % 10 == 0:
-                tqdm_bar.set_postfix_str(f"Loss {loss.item()}")
+            if epoch % 10 == 0:
+                tqdm_bar.set_postfix_str(f"loss {loss.item():.2e}")
 
     return model
