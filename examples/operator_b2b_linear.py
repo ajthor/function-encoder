@@ -127,7 +127,6 @@ Y = Y.unsqueeze(-1).unsqueeze(0)
 Tf = Tf.unsqueeze(-1).unsqueeze(0)
 
 input_coefficients = input_function_encoder.compute_coefficients(X, f)
-# output_coefficients = torch.dot(input_coefficients, operator)
 output_coefficients = torch.einsum("bk,kl->bl", input_coefficients, operator)
 
 Tf_pred = output_function_encoder(Y, output_coefficients)
