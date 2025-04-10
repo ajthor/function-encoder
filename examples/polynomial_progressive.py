@@ -6,7 +6,8 @@ from torch.utils.data import DataLoader
 
 from function_encoder.model.mlp import MLP, MultiHeadedMLP
 from function_encoder.function_encoder import BasisFunctions, FunctionEncoder
-from function_encoder.utils.training import fit
+from function_encoder.losses import basis_normalization_loss
+from function_encoder.utils.training import fit_progressive
 
 import tqdm
 
@@ -56,45 +57,22 @@ def loss_function(model, batch):
     y_pred = model(X, coefficients)
 
     pred_loss = torch.nn.functional.mse_loss(y_pred, y)
+    norm_loss = basis_normalization_loss(model.basis_functions(X))
 
-    return pred_loss
+    return pred_loss + norm_loss
 
 
-# Train the first basis function
-model = fit(model=model, ds=dataloader, loss_function=loss_function)
-
-# Train the remaining basis functions progressively
-for i in tqdm.tqdm(range(n_basis - 1)):
-
-    # Freeze all parameters except the new basis function
-    for param in model.parameters():
-        param.requires_grad = False
-
-    # Create new basis function
-    new_basis_function = basis_function_factory()
-
-    for param in new_basis_function.parameters():
-        param.requires_grad = True
-
-    model.basis_functions.basis_functions.append(new_basis_function)
-
-    trainable_params = [p for p in model.parameters() if p.requires_grad]
-    optimizer = torch.optim.Adam(trainable_params, lr=1e-3)
-
-    model.train()
-
-    with tqdm.tqdm(range(1000), leave=True) as tqdm_bar:
-        for epoch in tqdm_bar:
-            for batch in dataloader:
-                optimizer.zero_grad()
-                loss = loss_function(model, batch)
-                loss.backward()
-                optimizer.step()
-                break
-
-            if epoch % 10 == 0:
-                tqdm_bar.set_postfix_str(f"loss {loss.item():.2e}")
-
+# Train the model progressively
+model = fit_progressive(
+    model=model,
+    ds=dataloader,
+    loss_function=loss_function,
+    n_basis=n_basis,
+    basis_function_factory=basis_function_factory,
+    epochs_per_function=1000,
+    learning_rate=1e-3,
+    freeze_existing=True,
+)
 
 # Plot results
 
