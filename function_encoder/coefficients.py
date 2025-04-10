@@ -2,6 +2,17 @@ import torch
 
 
 def monte_carlo_integration(f, g, inner_product):
+    """Compute the coefficients using Monte Carlo integration.
+
+    Args:
+        f: function evaluations [batch_size, n_points, n_features]
+        g: basis functions evaluations [batch_size, n_points, n_features, n_basis]
+        inner_product: inner product function
+
+    Returns:
+        coefficients: coefficients of the basis functions [batch_size, n_basis]
+    """
+
     F = inner_product(g, f.unsqueeze(-1)).squeeze(-1)
 
     coefficients = F
@@ -9,6 +20,18 @@ def monte_carlo_integration(f, g, inner_product):
 
 
 def least_squares(f, g, inner_product, regularization=1e-6):
+    """Compute the coefficients using least squares.
+
+    Args:
+        f: function evaluations [batch_size, n_points, n_features]
+        g: basis functions evaluations [batch_size, n_points, n_features, n_basis]
+        inner_product: inner product function
+        regularization: regularization parameter
+
+    Returns:
+        coefficients: coefficients of the basis functions [batch_size, n_basis]
+    """
+
     F = inner_product(g, f.unsqueeze(-1)).squeeze(-1)
     G = inner_product(g, g)
     G += regularization * torch.eye(G.size(-1), device=G.device)

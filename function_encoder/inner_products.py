@@ -1,9 +1,8 @@
 import torch
 
 
-def standard_inner_product(f, g):
-    """
-    Computes the standard inner product between two tensors f and g.
+def standard_inner_product(f: torch.Tensor, g: torch.Tensor) -> torch.Tensor:
+    """Computes the standard inner product between two tensors f and g.
 
     The input tensors are of shape (b, m, d, k) and (b, m, d, l), where:
       - b is the batch size
@@ -27,9 +26,8 @@ def standard_inner_product(f, g):
     return torch.einsum("bmdk,bmdl->bmkl", f, g).mean(dim=1)
 
 
-def centered_inner_product(f, g):
-    """
-    Computes the centered inner product between two tensors f and g.
+def centered_inner_product(f: torch.Tensor, g: torch.Tensor) -> torch.Tensor:
+    """Computes the centered inner product between two tensors f and g.
 
     The centered inner product is computed by first centering the tensors
     along the m dimension (i.e., subtracting the mean of each tensor

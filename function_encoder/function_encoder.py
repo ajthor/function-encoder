@@ -34,6 +34,18 @@ class FunctionEncoder(torch.nn.Module):
         self.inner_product = inner_product
 
     def compute_coefficients(self, x, y, return_G=False):
+        """Compute the coefficients of the basis functions.
+
+        Args:
+            x: input data [batch_size, n_points, n_features]
+            y: target data [batch_size, n_points, n_features]
+            return_G: whether to return the basis functions evaluations
+
+        Returns:
+            coefficients: coefficients of the basis functions [batch_size, n_basis]
+            G: Gram matrix [batch_size, n_basis, n_basis] (if return_G=True)
+        """
+
         G = self.basis_functions(x)
 
         if self.residual_function is not None:
@@ -50,6 +62,16 @@ class FunctionEncoder(torch.nn.Module):
             return coefficients
 
     def forward(self, x, coefficients):
+        """Evaluate the function corresponding to the coefficients at x.
+
+        Args:
+            x: input data [batch_size, n_points, n_features]
+            coefficients: coefficients of the basis functions [batch_size, n_basis]
+
+        Returns:
+            y: function value at x [batch_size, n_points, n_features]
+        """
+
         G = self.basis_functions(x)
         y = torch.einsum("bmdk,bk->bmd", G, coefficients)
 
