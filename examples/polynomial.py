@@ -30,9 +30,7 @@ dataloader = DataLoader(ds["train"], batch_size=50)
 
 # Create basis functions
 
-# basis_functions = BasisFunctions(
-#     torch.nn.ModuleList([MLP(layer_sizes=[1, 32, 1]) for _ in range(8)])
-# )
+# basis_functions = BasisFunctions([MLP(layer_sizes=[1, 32, 1]) for _ in range(8)])
 basis_functions = MultiHeadedMLP(layer_sizes=[1, 32, 1], num_heads=8)
 
 # Create model

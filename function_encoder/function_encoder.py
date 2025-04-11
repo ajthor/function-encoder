@@ -8,12 +8,12 @@ class BasisFunctions(torch.nn.Module):
     """A module representing a collection of basis functions.
 
     Args:
-        basis_functions (torch.nn.ModuleList): List of basis function modules
+        basis_functions (torch.nn.Module): A collection of basis functions to be evaluated.
     """
 
-    def __init__(self, basis_functions: torch.nn.ModuleList):
+    def __init__(self, *basis_functions: torch.nn.Module):
         super(BasisFunctions, self).__init__()
-        self.basis_functions = basis_functions
+        self.basis_functions = torch.nn.ModuleList(basis_functions)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Evaluate all basis functions at the input points.

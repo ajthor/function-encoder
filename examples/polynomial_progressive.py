@@ -36,7 +36,7 @@ def basis_function_factory():
 
 
 n_basis = 8
-basis_functions = BasisFunctions(torch.nn.ModuleList([basis_function_factory()]))
+basis_functions = BasisFunctions([basis_function_factory()])
 
 
 # Create model
