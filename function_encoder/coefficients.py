@@ -43,7 +43,7 @@ def least_squares(
     return coefficients
 
 
-def soft_thresholding(x: torch.Tensor, regularization: float) -> torch.Tensor:
+def _soft_thresholding(x: torch.Tensor, regularization: float) -> torch.Tensor:
     """Apply soft thresholding to a tensor.
 
     Args:
@@ -82,7 +82,7 @@ def lasso(
     coefficients = torch.zeros(g.shape[0], g.shape[-1], device=g.device)
     for _ in range(n_iterations):
         grad = torch.einsum("bkl,bl->bk", G, coefficients) - F
-        coefficients = soft_thresholding(
+        coefficients = _soft_thresholding(
             coefficients - learning_rate * grad, regularization
         )
     return coefficients

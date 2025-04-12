@@ -55,33 +55,25 @@ class FunctionEncoder(torch.nn.Module):
         self.inner_product = inner_product
 
     def compute_coefficients(
-        self, x: torch.Tensor, y: torch.Tensor, return_G: bool = False
+        self, x: torch.Tensor, y: torch.Tensor
     ) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
         """Compute the coefficients of the basis functions.
 
         Args:
             x (torch.Tensor): Input data [batch_size, n_points, n_features]
             y (torch.Tensor): Target data [batch_size, n_points, n_features]
-            return_G (bool, optional): Whether to return the basis functions evaluations. Defaults to False.
 
         Returns:
-            Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
-                If return_G is False, returns coefficients [batch_size, n_basis].
-                If return_G is True, returns a tuple of (coefficients, G), where G is the basis
-                function evaluations [batch_size, n_points, n_features, n_basis].
+            torch.Tensor: Basis coefficients [batch_size, n_basis]
         """
-        G = self.basis_functions(x)
+        f = y
+        g = self.basis_functions(x)
         if self.residual_function is not None:
-            y_residual = self.residual_function(x)
-            coefficients = self.coefficients_method(
-                y - y_residual, G, self.inner_product
-            )
-        else:
-            coefficients = self.coefficients_method(y, G, self.inner_product)
-        if return_G:
-            return coefficients, G
-        else:
-            return coefficients
+            f -= self.residual_function(x)
+
+        coefficients = self.coefficients_method(f, g, self.inner_product)
+
+        return coefficients
 
     def forward(self, x: torch.Tensor, coefficients: torch.Tensor) -> torch.Tensor:
         """Evaluate the function corresponding to the coefficients at x.
