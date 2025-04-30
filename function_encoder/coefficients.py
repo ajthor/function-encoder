@@ -16,7 +16,7 @@ def monte_carlo_integration(
     """
     F = inner_product(g, f.unsqueeze(-1)).squeeze(-1)
     coefficients = F
-    return coefficients
+    return coefficients, None
 
 
 def least_squares(
@@ -40,7 +40,7 @@ def least_squares(
     G = inner_product(g, g)
     G += regularization * torch.eye(G.size(-1), device=G.device)
     coefficients = torch.linalg.solve(G, F)
-    return coefficients
+    return coefficients, G
 
 
 def _soft_thresholding(x: torch.Tensor, regularization: float) -> torch.Tensor:
@@ -85,7 +85,7 @@ def lasso(
         coefficients = _soft_thresholding(
             coefficients - learning_rate * grad, regularization
         )
-    return coefficients
+    return coefficients, G
 
 
 def gradient_descent(
@@ -113,4 +113,4 @@ def gradient_descent(
     for _ in range(n_iterations):
         grad = torch.einsum("bkl,bl->bk", G, coefficients) - F
         coefficients = coefficients - learning_rate * grad
-    return coefficients
+    return coefficients, G

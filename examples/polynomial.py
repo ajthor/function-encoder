@@ -47,11 +47,11 @@ def loss_function(model, batch):
     X = X.unsqueeze(-1)  # Fix for 1D input
     y = y.unsqueeze(-1)  # Fix for 1D input
 
-    coefficients = model.compute_coefficients(X, y)
+    coefficients, G = model.compute_coefficients(X, y)
     y_pred = model(X, coefficients)
 
     pred_loss = torch.nn.functional.mse_loss(y_pred, y)
-    norm_loss = basis_normalization_loss(model.basis_functions(X))
+    norm_loss = basis_normalization_loss(G)
 
     return pred_loss + norm_loss
 
@@ -74,7 +74,7 @@ with torch.no_grad():
     X = torch.linspace(-1, 1, 100)
     X = X.unsqueeze(1)  # Fix for 1D input
     X = X.unsqueeze(0)  # Add batch dimension
-    coefficients = model.compute_coefficients(example_X, example_y)
+    coefficients, _ = model.compute_coefficients(example_X, example_y)
     y_pred = model(X, coefficients)
 
     fig = plt.figure()

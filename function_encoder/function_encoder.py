@@ -65,15 +65,16 @@ class FunctionEncoder(torch.nn.Module):
 
         Returns:
             torch.Tensor: Basis coefficients [batch_size, n_basis]
+
         """
         f = y
         g = self.basis_functions(x)
         if self.residual_function is not None:
             f -= self.residual_function(x)
 
-        coefficients = self.coefficients_method(f, g, self.inner_product)
+        coefficients, G = self.coefficients_method(f, g, self.inner_product)
 
-        return coefficients
+        return coefficients, G
 
     def forward(self, x: torch.Tensor, coefficients: torch.Tensor) -> torch.Tensor:
         """Evaluate the function corresponding to the coefficients at x.

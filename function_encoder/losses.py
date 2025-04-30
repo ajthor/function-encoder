@@ -10,7 +10,7 @@ def basis_normalization_loss(K: torch.Tensor) -> torch.Tensor:
     Returns:
         torch.Tensor: Mean squared difference of diagonal elements from one
     """
-    return ((torch.diagonal(K, dim1=-2, dim2=-1)) ** 2).mean()
+    return ((torch.diagonal(K, dim1=-2, dim2=-1) - 1) ** 2).mean()
 
 
 def basis_orthonormality_loss(K: torch.Tensor, device: torch.device) -> torch.Tensor:
