@@ -16,7 +16,7 @@ import matplotlib.pyplot as plt
 import tqdm
 
 if torch.cuda.is_available():
-    device = "cuda"
+    device = "cuda:5"
 elif torch.backends.mps.is_available():
     device = "mps"
 else:
@@ -42,27 +42,30 @@ def rk45(func, y0, t, device=device, **ode_kwargs):
     """Runge-Kutta 4th order method for ODE integration."""
 
     y = torch.zeros(
-        y0.shape[0], len(t), y0.shape[1], device=device
+        y0.shape[0], len(t) - 1, y0.shape[1], device=device
     )  # [batch, timesteps, features]
-    y[:, 0, :] = y0.clone()
-    for i in range(1, len(t)):
-        y[:, i, :] = rk45_step(
-            func, t[i - 1], y[:, i - 1, :].clone(), t[i] - t[i - 1], **ode_kwargs
-        )
+
+    y_current = y0.clone()
+    for i in range(len(t) - 1):
+        y[:, i, :] = rk45_step(func, t[i], y_current, t[i + 1] - t[i], **ode_kwargs)
+        y_current = y[:, i, :].clone()
 
     return y
 
 
 def generate_batch(batch_size=8, dt=0.01, T=10.0, device=device):
 
-    # Generate random initial conditions
-    y0 = torch.rand(batch_size, 2, device=device) * 3 - 1.5
+    with torch.no_grad():
+        # Generate random initial conditions
+        y0 = torch.rand(batch_size, 2, device=device) * 3 - 1.5
 
-    # Generate random mu parameters
-    mu = torch.rand(batch_size, device=device) * 2 + 0.5
+        # Generate random mu parameters
+        mu = torch.rand(batch_size, device=device) * 2 + 0.5
+        # mu = 1.0
 
-    t = torch.arange(0, T, dt, device=device)
-    y = rk45(van_der_pol, y0, t, device=device, mu=mu)
+        n = int(T / dt) + 1
+        t = torch.arange(n, device=device) * dt
+        y = rk45(van_der_pol, y0, t, device=device, mu=mu)
 
     return y0, t, y
 
@@ -71,32 +74,22 @@ def generate_batch(batch_size=8, dt=0.01, T=10.0, device=device):
 def basis_factory():
     return NeuralODE(
         ode_func=ODEFunc(
-            model=MLP(layer_sizes=[2, 256, 256, 2], activation=torch.nn.ReLU())
+            model=MLP(layer_sizes=[2, 64, 64, 2], activation=torch.nn.ReLU())
         ),
         integrator=rk45,
     )
 
 
-class NeuralODEBasisFunctions(torch.nn.Module):
-    def __init__(self, *basis_functions):
-        super(NeuralODEBasisFunctions, self).__init__()
-        self.basis_functions = nn.ModuleList(basis_functions)
-
-    def forward(self, x):
-        return torch.stack([basis(*x) for basis in self.basis_functions], dim=-1)
-
-
-n_basis = 8
-basis_functions = NeuralODEBasisFunctions(*[basis_factory() for _ in range(n_basis)])
+n_basis = 20
+basis_functions = BasisFunctions(*[basis_factory() for _ in range(n_basis)])
 
 # Create model
 
-model = FunctionEncoder(basis_functions)
-model.to(device)
-
+model = FunctionEncoder(basis_functions).to(device)
 
 epochs = 1000
 batch_size = 50
+n_example_points = 10
 
 optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
 
@@ -105,54 +98,72 @@ plt.show(block=False)
 
 with tqdm.trange(epochs) as tqdm_bar:
     for epoch in tqdm_bar:
+        model.train()
 
         optimizer.zero_grad()
 
         y0, t, y = generate_batch(batch_size=batch_size, dt=0.1, T=3.0, device=device)
 
-        coefficients = model.compute_coefficients((y0, t[:10]), y[:, :10, :])
+        coefficients, G = model.compute_coefficients(
+            (y0, t[: n_example_points + 1]), y[:, :n_example_points, :]
+        )
+        # coefficients = coefficients / coefficients.sum(dim=-1, keepdim=True)
         pred = model((y0, t), coefficients=coefficients)
 
-        loss = torch.nn.functional.mse_loss(pred, y)
+        pred_loss = torch.nn.functional.mse_loss(pred, y)
+        norm_loss = basis_normalization_loss(G)
+        loss = pred_loss + norm_loss
 
         loss.backward()
         optimizer.step()
 
         tqdm_bar.set_postfix_str(f"loss: {loss.item():.2e}")
 
-        # if epoch % 10 == 0:
-        #     # Plot the evaluation trajectory.
-        #     ax.clear()
-        #     ax.set_xlim(-5, 5)
-        #     ax.set_ylim(-5, 5)
+        if epoch % 10 == 0:
+            # Plot the evaluation trajectory.
+            ax.clear()
+            ax.set_xlim(-5, 5)
+            ax.set_ylim(-5, 5)
 
-        #     model.eval()
+            with torch.no_grad():
+                model.eval()
 
-        #     y0, t, y = generate_batch(batch_size=1, dt=0.1, T=10.0, device=device)
+                y0, t, y = generate_batch(batch_size=1, dt=0.1, T=10.0, device=device)
 
-        #     ax.plot(
-        #         y[0, :, 0].detach().cpu().numpy(), y[0, :, 1].detach().cpu().numpy()
-        #     )
+                coefficients, G = model.compute_coefficients(
+                    (y0, t[: n_example_points + 1]), y[:, :n_example_points, :]
+                )
+                # coefficients = coefficients / coefficients.sum(dim=-1, keepdim=True)
+                pred = model((y0, t), coefficients=coefficients)
 
-        #     coefficients = model.compute_coefficients((y0, t[:10]), y[:, :10, :])
-        #     pred = model((y0, t), coefficients=coefficients)
-        #     pred = pred.detach().cpu().numpy()
-        #     ax.plot(pred[0, :, 0], pred[0, :, 1], label="Neural ODE")
+                y = y.detach().cpu().numpy()
+                pred = pred.detach().cpu().numpy()
 
-        #     plt.draw()
-        #     plt.pause(0.1)
+                ax.plot(y[0, :, 0], y[0, :, 1])
+                ax.plot(pred[0, :, 0], pred[0, :, 1], label="Neural ODE")
+                ax.plot(
+                    y[0, :n_example_points, 0], y[0, :n_example_points, 1], color="red"
+                )
 
-        #     model.train()
+                plt.draw()
+                plt.pause(0.1)
+
 
 # Save the model
 torch.save(model.state_dict(), "examples/van_der_pol_model.pth")
 
 # Plot a grid of evaluations
 with torch.no_grad():
+    model.eval()
     y0, t, y = generate_batch(batch_size=9, dt=0.1, T=10.0, device=device)
 
-    coefficients = model.compute_coefficients((y0, t[:5]), y[:, :5, :])
+    coefficients, G = model.compute_coefficients(
+        (y0, t[:n_example_points]), y[:, :n_example_points, :]
+    )
+    # coefficients = coefficients / coefficients.sum(dim=-1, keepdim=True)
     pred = model((y0, t), coefficients=coefficients)
+
+    y = y.detach().cpu().numpy()
     pred = pred.detach().cpu().numpy()
 
     fig, ax = plt.subplots(3, 3, figsize=(10, 10))
@@ -162,8 +173,8 @@ with torch.no_grad():
             ax[i, j].set_xlim(-5, 5)
             ax[i, j].set_ylim(-5, 5)
             ax[i, j].plot(
-                y[i * 3 + j, :, 0].detach().cpu().numpy(),
-                y[i * 3 + j, :, 1].detach().cpu().numpy(),
+                y[i * 3 + j, :, 0],
+                y[i * 3 + j, :, 1],
                 label="True",
             )
             ax[i, j].plot(
