@@ -86,8 +86,8 @@ class FunctionEncoder(torch.nn.Module):
         Returns:
             torch.Tensor: Function values at x [batch_size, n_points, n_features]
         """
-        G = self.basis_functions(x)
-        y = torch.einsum("bmdk,bk->bmd", G, coefficients)
+        g = self.basis_functions(x)
+        y = torch.einsum("bmdk,bk->bmd", g, coefficients)
         if self.residual_function is not None:
             y += self.residual_function(x)
         return y

@@ -5,7 +5,7 @@ from typing import Callable, Optional, Tuple, Union
 from function_encoder.coefficients import least_squares
 from function_encoder.inner_products import standard_inner_product
 
-from function_encoder.model.mlp import MLP
+from function_encoder.model.mlp import MLP, MultiHeadedMLP
 from function_encoder.model.neural_ode import NeuralODE, ODEFunc
 from function_encoder.function_encoder import BasisFunctions, FunctionEncoder
 from function_encoder.losses import basis_normalization_loss
@@ -27,28 +27,33 @@ torch.manual_seed(42)
 
 # Define Van der Pol dynamics.
 def van_der_pol(t, x, mu=1.0):
-    return torch.stack([x[:, 1], mu * (1 - x[:, 0] ** 2) * x[:, 1] - x[:, 0]], dim=1)
+    return torch.stack(
+        [x[..., 1], mu * (1 - x[..., 0] ** 2) * x[..., 1] - x[..., 0]], dim=-1
+    )
 
 
 def rk45_step(func, t, x, dt, **ode_kwargs):
     k1 = func(t, x, **ode_kwargs)
-    k2 = func(t + dt / 2, x + dt / 2 * k1, **ode_kwargs)
-    k3 = func(t + dt / 2, x + dt / 2 * k2, **ode_kwargs)
-    k4 = func(t + dt, x + dt * k3, **ode_kwargs)
-    return x + dt / 6 * (k1 + 2 * k2 + 2 * k3 + k4)
+    k2 = func(t + dt / 2, x + (dt / 2).unsqueeze(-1) * k1, **ode_kwargs)
+    k3 = func(t + dt / 2, x + (dt / 2).unsqueeze(-1) * k2, **ode_kwargs)
+    k4 = func(t + dt, x + dt.unsqueeze(-1) * k3, **ode_kwargs)
+    return x + (dt / 6).unsqueeze(-1) * (k1 + 2 * k2 + 2 * k3 + k4)
 
 
 def rk45(func, y0, t, device=device, **ode_kwargs):
     """Runge-Kutta 4th order method for ODE integration."""
 
-    y = torch.zeros(
-        y0.shape[0], len(t) - 1, y0.shape[1], device=device
-    )  # [batch, timesteps, features]
+    y = torch.zeros(y0.shape[0], t.shape[1], y0.shape[2], device=device)
+    y[..., 0, :] = y0[..., 0, :].clone()
 
-    y_current = y0.clone()
-    for i in range(len(t) - 1):
-        y[:, i, :] = rk45_step(func, t[i], y_current, t[i + 1] - t[i], **ode_kwargs)
-        y_current = y[:, i, :].clone()
+    for i in range(1, t.shape[1]):
+        y[..., i, :] = rk45_step(
+            func,
+            t[..., i - 1],
+            y[..., i - 1, :].clone(),
+            t[..., i] - t[..., i - 1],
+            **ode_kwargs,
+        )
 
     return y
 
@@ -57,7 +62,7 @@ def generate_batch(batch_size=8, dt=0.01, T=10.0, device=device):
 
     with torch.no_grad():
         # Generate random initial conditions
-        y0 = torch.rand(batch_size, 2, device=device) * 3 - 1.5
+        y0 = torch.rand(batch_size, 1, 2, device=device) * 3 - 1.5
 
         # Generate random mu parameters
         mu = torch.rand(batch_size, device=device) * 2 + 0.5
@@ -65,6 +70,7 @@ def generate_batch(batch_size=8, dt=0.01, T=10.0, device=device):
 
         n = int(T / dt) + 1
         t = torch.arange(n, device=device) * dt
+        t = t.expand(batch_size, -1)
         y = rk45(van_der_pol, y0, t, device=device, mu=mu)
 
     return y0, t, y
@@ -80,18 +86,20 @@ def basis_factory():
     )
 
 
-n_basis = 20
+n_basis = 5
 basis_functions = BasisFunctions(*[basis_factory() for _ in range(n_basis)])
 
 # Create model
 
 model = FunctionEncoder(basis_functions).to(device)
 
-epochs = 1000
+
+epochs = 5000
 batch_size = 50
 n_example_points = 10
 
-optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+optimizer = torch.optim.Adam(model.parameters(), lr=1e-2)
+
 
 fig, ax = plt.subplots()
 plt.show(block=False)
@@ -99,15 +107,13 @@ plt.show(block=False)
 with tqdm.trange(epochs) as tqdm_bar:
     for epoch in tqdm_bar:
         model.train()
-
         optimizer.zero_grad()
 
-        y0, t, y = generate_batch(batch_size=batch_size, dt=0.1, T=3.0, device=device)
-
+        T = torch.rand(1, device=device) * 10 + 2
+        y0, t, y = generate_batch(batch_size=batch_size, dt=0.1, T=T, device=device)
         coefficients, G = model.compute_coefficients(
-            (y0, t[: n_example_points + 1]), y[:, :n_example_points, :]
+            (y0, t[:, :n_example_points]), y[:, :n_example_points, :]
         )
-        # coefficients = coefficients / coefficients.sum(dim=-1, keepdim=True)
         pred = model((y0, t), coefficients=coefficients)
 
         pred_loss = torch.nn.functional.mse_loss(pred, y)
@@ -115,6 +121,9 @@ with tqdm.trange(epochs) as tqdm_bar:
         loss = pred_loss + norm_loss
 
         loss.backward()
+
+        torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+
         optimizer.step()
 
         tqdm_bar.set_postfix_str(f"loss: {loss.item():.2e}")
@@ -131,9 +140,8 @@ with tqdm.trange(epochs) as tqdm_bar:
                 y0, t, y = generate_batch(batch_size=1, dt=0.1, T=10.0, device=device)
 
                 coefficients, G = model.compute_coefficients(
-                    (y0, t[: n_example_points + 1]), y[:, :n_example_points, :]
+                    (y0, t[:, :n_example_points]), y[:, :n_example_points, :]
                 )
-                # coefficients = coefficients / coefficients.sum(dim=-1, keepdim=True)
                 pred = model((y0, t), coefficients=coefficients)
 
                 y = y.detach().cpu().numpy()
@@ -158,9 +166,8 @@ with torch.no_grad():
     y0, t, y = generate_batch(batch_size=9, dt=0.1, T=10.0, device=device)
 
     coefficients, G = model.compute_coefficients(
-        (y0, t[:n_example_points]), y[:, :n_example_points, :]
+        (y0, t[:, :n_example_points]), y[:, :n_example_points, :]
     )
-    # coefficients = coefficients / coefficients.sum(dim=-1, keepdim=True)
     pred = model((y0, t), coefficients=coefficients)
 
     y = y.detach().cpu().numpy()

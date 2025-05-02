@@ -41,6 +41,9 @@ class NeuralODE(torch.nn.Module):
     def forward(self, inputs, ode_kwargs={}):
         """Solve the initial value problem.
 
+        The output of the integrator has to be [batch_size, n_points, n_features].
+        This means the inputs (y0, t) have to be [batch_size, 1, n_features] and [batch_size, n_points].
+
         Args:
             inputs (tuple): A tuple containing (y0, t), where:
                 y0 (torch.Tensor): Initial condition
