@@ -35,7 +35,7 @@ class FunctionEncoder(torch.nn.Module):
     input-output pairs, and can evaluate the functions at new inputs.
 
     Args:
-        basis_functions (torch.nn.Module): Module providing basis function evaluations
+        basis_functions (torch.nn.Module): Module representing a collection of basis functions.
         residual_function (Optional[torch.nn.Module], optional): Module for residual function. Defaults to None.
         coefficients_method (Callable, optional): Method to compute coefficients. Defaults to least_squares.
         inner_product (Callable, optional): Inner product function. Defaults to standard_inner_product.
@@ -70,17 +70,17 @@ class FunctionEncoder(torch.nn.Module):
         f = y
         g = self.basis_functions(x)
         if self.residual_function is not None:
-            f -= self.residual_function(x)
+            f = f - self.residual_function(x)
 
         coefficients, G = self.coefficients_method(f, g, self.inner_product)
 
         return coefficients, G
 
     def forward(self, x: torch.Tensor, coefficients: torch.Tensor) -> torch.Tensor:
-        """Evaluate the function corresponding to the coefficients at x.
+        """Evaluate the function with the given coefficients at x.
 
         Args:
-            x (torch.Tensor): Input data [batch_size, n_points, n_features]
+            x (torch.Tensor): Evaluation (query) points [batch_size, n_points, n_features]
             coefficients (torch.Tensor): Coefficients of the basis functions [batch_size, n_basis]
 
         Returns:
@@ -89,5 +89,5 @@ class FunctionEncoder(torch.nn.Module):
         g = self.basis_functions(x)
         y = torch.einsum("bmdk,bk->bmd", g, coefficients)
         if self.residual_function is not None:
-            y += self.residual_function(x)
+            y = y + self.residual_function(x)
         return y

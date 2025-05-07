@@ -1,6 +1,10 @@
+from typing import Callable, Optional, Tuple, Union
+
 import torch
 import torch.nn as nn
-from typing import Callable, Optional, Tuple, Union
+from torch.utils.data import IterableDataset, DataLoader
+
+from torchdiffeq import odeint
 
 from function_encoder.coefficients import least_squares
 from function_encoder.inner_products import standard_inner_product
@@ -25,14 +29,8 @@ else:
 torch.manual_seed(42)
 
 
-# Define Van der Pol dynamics.
-def van_der_pol(t, x, mu=1.0):
-    return torch.stack(
-        [x[..., 1], mu * (1 - x[..., 0] ** 2) * x[..., 1] - x[..., 0]], dim=-1
-    )
-
-
-def rk45_step(func, t, x, dt, **ode_kwargs):
+def rk4_step(func, x, dt, **ode_kwargs):
+    t = torch.zeros_like(dt, device=dt.device)
     k1 = func(t, x, **ode_kwargs)
     k2 = func(t + dt / 2, x + (dt / 2).unsqueeze(-1) * k1, **ode_kwargs)
     k3 = func(t + dt / 2, x + (dt / 2).unsqueeze(-1) * k2, **ode_kwargs)
@@ -40,66 +38,85 @@ def rk45_step(func, t, x, dt, **ode_kwargs):
     return x + (dt / 6).unsqueeze(-1) * (k1 + 2 * k2 + 2 * k3 + k4)
 
 
-def rk45(func, y0, t, device=device, **ode_kwargs):
-    """Runge-Kutta 4th order method for ODE integration."""
-
-    y = torch.zeros(y0.shape[0], t.shape[1], y0.shape[2], device=device)
-    y[..., 0, :] = y0[..., 0, :].clone()
-
-    for i in range(1, t.shape[1]):
-        y[..., i, :] = rk45_step(
-            func,
-            t[..., i - 1],
-            y[..., i - 1, :].clone(),
-            t[..., i] - t[..., i - 1],
-            **ode_kwargs,
-        )
-
-    return y
+def van_der_pol(t, x, mu=1.0):
+    return torch.stack(
+        [x[..., 1], mu * (1 - x[..., 0] ** 2) * x[..., 1] - x[..., 0]], dim=-1
+    )
 
 
-def generate_batch(batch_size=8, dt=0.01, T=10.0, device=device):
+class VanDerPolDataset(IterableDataset):
+    def __init__(
+        self,
+        n_points: int = 1000,
+        n_example_points: int = 100,
+        mu_range=(0.5, 2.5),
+        y0_range=(-2.0, 2.0),
+        dt_range=(0.01, 0.1),
+    ):
+        super().__init__()
+        self.n_points = n_points
+        self.n_example_points = n_example_points
+        self.mu_range = mu_range
+        self.y0_range = y0_range
+        self.dt_range = dt_range
 
-    with torch.no_grad():
-        # Generate random initial conditions
-        y0 = torch.rand(batch_size, 1, 2, device=device) * 3 - 1.5
+    def __iter__(self):
+        while True:
+            # Generate a single mu
+            mu = torch.empty(1, device=device).uniform_(*self.mu_range)
+            # Generate random initial conditions
+            _y0 = torch.empty(
+                self.n_example_points + self.n_points, 2, device=device
+            ).uniform_(*self.y0_range)
+            # Generate random time steps
+            _dt = torch.empty(
+                self.n_example_points + self.n_points, device=device
+            ).uniform_(*self.dt_range)
+            # Integrate one step
+            _y1 = rk4_step(van_der_pol, _y0, _dt, mu=mu)
 
-        # Generate random mu parameters
-        mu = torch.rand(batch_size, device=device) * 2 + 0.5
-        # mu = 1.0
+            # Split the data
+            y0_example = _y0[: self.n_example_points]
+            dt_example = _dt[: self.n_example_points]
+            y1_example = _y1[: self.n_example_points]
 
-        n = int(T / dt) + 1
-        t = torch.arange(n, device=device) * dt
-        t = t.expand(batch_size, -1)
-        y = rk45(van_der_pol, y0, t, device=device, mu=mu)
+            y0 = _y0[self.n_example_points :]
+            dt = _dt[self.n_example_points :]
+            y1 = _y1[self.n_example_points :]
 
-    return y0, t, y
+            yield mu, y0, dt, y1, y0_example, dt_example, y1_example
 
 
 # Create basis functions
 def basis_factory():
     return NeuralODE(
         ode_func=ODEFunc(
-            model=MLP(layer_sizes=[2, 64, 64, 2], activation=torch.nn.ReLU())
+            model=MLP(layer_sizes=[2, 128, 128, 2], activation=torch.nn.ReLU())
         ),
-        integrator=rk45,
+        integrator=rk4_step,
     )
 
 
-n_basis = 5
+n_basis = 20
 basis_functions = BasisFunctions(*[basis_factory() for _ in range(n_basis)])
+residual_function = basis_factory()
 
 # Create model
 
-model = FunctionEncoder(basis_functions).to(device)
+model = FunctionEncoder(basis_functions, residual_function=residual_function).to(device)
 
 
-epochs = 5000
+epochs = 1000
 batch_size = 50
-n_example_points = 10
+n_points = 1000
+n_example_points = 100
 
-optimizer = torch.optim.Adam(model.parameters(), lr=1e-2)
-
+optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+dataloader = DataLoader(
+    VanDerPolDataset(n_points=n_points, n_example_points=n_example_points),
+    batch_size=batch_size,
+)
+dataloader_iter = iter(dataloader)
 
 fig, ax = plt.subplots()
 plt.show(block=False)
@@ -109,14 +126,16 @@ with tqdm.trange(epochs) as tqdm_bar:
         model.train()
         optimizer.zero_grad()
 
-        T = torch.rand(1, device=device) * 10 + 2
-        y0, t, y = generate_batch(batch_size=batch_size, dt=0.1, T=T, device=device)
-        coefficients, G = model.compute_coefficients(
-            (y0, t[:, :n_example_points]), y[:, :n_example_points, :]
-        )
-        pred = model((y0, t), coefficients=coefficients)
+        batch = next(dataloader_iter)
 
-        pred_loss = torch.nn.functional.mse_loss(pred, y)
+        mu, y0, dt, y1, y0_example, dt_example, y1_example = batch
+
+        coefficients, G = model.compute_coefficients(
+            (y0_example, dt_example), y1_example
+        )
+        pred = model((y0, dt), coefficients=coefficients)
+
+        pred_loss = torch.nn.functional.mse_loss(pred, y1)
         norm_loss = basis_normalization_loss(G)
         loss = pred_loss + norm_loss
 
@@ -128,33 +147,48 @@ with tqdm.trange(epochs) as tqdm_bar:
 
         tqdm_bar.set_postfix_str(f"loss: {loss.item():.2e}")
 
-        if epoch % 10 == 0:
-            # Plot the evaluation trajectory.
-            ax.clear()
-            ax.set_xlim(-5, 5)
-            ax.set_ylim(-5, 5)
+        # if epoch % 10 == 0:
+        #     # Plot the evaluation trajectory.
+        #     ax.clear()
+        #     ax.set_xlim(-5, 5)
+        #     ax.set_ylim(-5, 5)
 
-            with torch.no_grad():
-                model.eval()
+        #     with torch.no_grad():
+        #         model.eval()
 
-                y0, t, y = generate_batch(batch_size=1, dt=0.1, T=10.0, device=device)
+        #         # Plot a single trajectory using the data from the first batch
+        #         _mu = mu[0]
+        #         _y0 = torch.empty(1, 2, device=device).uniform_(
+        #             *dataloader.dataset.y0_range
+        #         )
+        #         _c = coefficients[0].unsqueeze(0)
 
-                coefficients, G = model.compute_coefficients(
-                    (y0, t[:, :n_example_points]), y[:, :n_example_points, :]
-                )
-                pred = model((y0, t), coefficients=coefficients)
+        #         n = int(10 / 0.1)
+        #         _dt = torch.tensor([0.1], device=device)
 
-                y = y.detach().cpu().numpy()
-                pred = pred.detach().cpu().numpy()
+        #         x = _y0.clone()
+        #         y = [x]
+        #         for i in range(n):
+        #             x = rk4_step(van_der_pol, x, _dt, mu=_mu)
+        #             y.append(x)
+        #         y = torch.cat(y, dim=0)
+        #         y = y.detach().cpu().numpy()
 
-                ax.plot(y[0, :, 0], y[0, :, 1])
-                ax.plot(pred[0, :, 0], pred[0, :, 1], label="Neural ODE")
-                ax.plot(
-                    y[0, :n_example_points, 0], y[0, :n_example_points, 1], color="red"
-                )
+        #         x = _y0.clone()
+        #         x = x.unsqueeze(1)
+        #         _dt = _dt.unsqueeze(0)
+        #         pred = [x]
+        #         for i in range(n):
+        #             x = model((x, _dt), coefficients=_c)
+        #             pred.append(x)
+        #         pred = torch.cat(pred, dim=1)
+        #         pred = pred.detach().cpu().numpy()
 
-                plt.draw()
-                plt.pause(0.1)
+        #         ax.plot(y[:, 0], y[:, 1])
+        #         ax.plot(pred[0, :, 0], pred[0, :, 1], label="Neural ODE")
+
+        #         plt.draw()
+        #         plt.pause(0.1)
 
 
 # Save the model
@@ -163,30 +197,52 @@ torch.save(model.state_dict(), "examples/van_der_pol_model.pth")
 # Plot a grid of evaluations
 with torch.no_grad():
     model.eval()
-    y0, t, y = generate_batch(batch_size=9, dt=0.1, T=10.0, device=device)
 
-    coefficients, G = model.compute_coefficients(
-        (y0, t[:, :n_example_points]), y[:, :n_example_points, :]
+    dataloader = DataLoader(
+        VanDerPolDataset(n_points=n_points, n_example_points=n_example_points),
+        batch_size=9,
     )
-    pred = model((y0, t), coefficients=coefficients)
+    dataloader_iter = iter(dataloader)
+    batch = next(dataloader_iter)
 
-    y = y.detach().cpu().numpy()
-    pred = pred.detach().cpu().numpy()
+    mu, y0, dt, y1, y0_example, dt_example, y1_example = batch
+    coefficients, G = model.compute_coefficients((y0_example, dt_example), y1_example)
 
     fig, ax = plt.subplots(3, 3, figsize=(10, 10))
 
     for i in range(3):
         for j in range(3):
+
+            _mu = mu[i * 3 + j]
+            _y0 = torch.empty(1, 2, device=device).uniform_(
+                *dataloader.dataset.y0_range
+            )
+            _c = coefficients[i * 3 + j].unsqueeze(0)
+            n = int(10 / 0.1)
+            _dt = torch.tensor([0.1], device=device)
+
+            x = _y0.clone()
+            y = [x]
+            for k in range(n):
+                x = rk4_step(van_der_pol, x, _dt, mu=_mu)
+                y.append(x)
+            y = torch.cat(y, dim=0)
+            y = y.detach().cpu().numpy()
+
+            x = _y0.clone()
+            x = x.unsqueeze(1)
+            _dt = _dt.unsqueeze(0)
+            pred = [x]
+            for k in range(n):
+                x = model((x, _dt), coefficients=_c)
+                pred.append(x)
+            pred = torch.cat(pred, dim=1)
+            pred = pred.detach().cpu().numpy()
+
             ax[i, j].set_xlim(-5, 5)
             ax[i, j].set_ylim(-5, 5)
-            ax[i, j].plot(
-                y[i * 3 + j, :, 0],
-                y[i * 3 + j, :, 1],
-                label="True",
-            )
-            ax[i, j].plot(
-                pred[i * 3 + j, :, 0], pred[i * 3 + j, :, 1], label="Neural ODE"
-            )
+            ax[i, j].plot(y[:, 0], y[:, 1], label="True")
+            ax[i, j].plot(pred[0, :, 0], pred[0, :, 1], label="Neural ODE")
             ax[i, j].legend()
 
     plt.show()

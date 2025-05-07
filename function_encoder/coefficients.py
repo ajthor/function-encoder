@@ -23,7 +23,7 @@ def least_squares(
     f: torch.Tensor,
     g: torch.Tensor,
     inner_product: callable,
-    regularization: float = 1e-6,
+    regularization: float = 1e-3,
 ) -> torch.Tensor:
     """Compute the coefficients using least squares.
 
@@ -43,7 +43,7 @@ def least_squares(
     return coefficients, G
 
 
-def _soft_thresholding(x: torch.Tensor, regularization: float) -> torch.Tensor:
+def _soft_thresholding(x: torch.Tensor, regularization: float = 1e-6) -> torch.Tensor:
     """Apply soft thresholding to a tensor.
 
     Args:

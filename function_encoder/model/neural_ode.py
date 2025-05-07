@@ -1,3 +1,4 @@
+from typing import Callable, Optional, Tuple, Dict
 import torch
 
 
@@ -30,19 +31,24 @@ class NeuralODE(torch.nn.Module):
 
     Args:
         ode_func (torch.nn.Module): The vector field
-        integrator (callable): ODE solver
+        integrator (Callable): The ODE solver (e.g., `rk4_step`, `odeint`).
     """
 
-    def __init__(self, ode_func, integrator):
+    def __init__(
+        self,
+        ode_func: Callable,
+        integrator: Callable,
+    ):
         super(NeuralODE, self).__init__()
         self.ode_func = ode_func
         self.integrator = integrator
 
-    def forward(self, inputs, ode_kwargs={}):
+    def forward(
+        self,
+        inputs,
+        ode_kwargs: Optional[Dict] = {},
+    ):
         """Solve the initial value problem.
-
-        The output of the integrator has to be [batch_size, n_points, n_features].
-        This means the inputs (y0, t) have to be [batch_size, 1, n_features] and [batch_size, n_points].
 
         Args:
             inputs (tuple): A tuple containing (y0, t), where:
@@ -53,5 +59,4 @@ class NeuralODE(torch.nn.Module):
         Returns:
             torch.Tensor: Solution of the ODE at the requested time points
         """
-        y0, t = inputs
-        return self.integrator(self.ode_func, y0, t, **ode_kwargs)
+        return self.integrator(self.ode_func, *inputs, **ode_kwargs)

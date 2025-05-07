@@ -11,7 +11,7 @@
 	],
 
 	"mounts": [
-		"source=/store/at46867,target=/store/at46867,type=bind,consistency=cached"
+		"source=/store/${localEnv:USER},target=/store/${localEnv:USER},type=bind,consistency=cached"
 	],
 
 	// Features to add to the dev container. More info: https://containers.dev/features.
