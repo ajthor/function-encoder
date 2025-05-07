@@ -50,7 +50,7 @@ class VanDerPolDataset(IterableDataset):
         n_points: int = 1000,
         n_example_points: int = 100,
         mu_range=(0.5, 2.5),
-        y0_range=(-2.0, 2.0),
+        y0_range=(-3.5, 3.5),
         dt_range=(0.01, 0.1),
     ):
         super().__init__()
@@ -91,20 +91,20 @@ class VanDerPolDataset(IterableDataset):
 def basis_factory():
     return NeuralODE(
         ode_func=ODEFunc(
-            model=MLP(layer_sizes=[2, 128, 128, 2], activation=torch.nn.ReLU())
+            model=MLP(layer_sizes=[2, 64, 64, 2], activation=torch.nn.ReLU())
         ),
         integrator=rk4_step,
     )
 
 
-n_basis = 20
-basis_functions = BasisFunctions(*[basis_factory() for _ in range(n_basis)])
-residual_function = basis_factory()
-
 # Create model
 
-model = FunctionEncoder(basis_functions, residual_function=residual_function).to(device)
+n_basis = 10
+basis_functions = BasisFunctions(*[basis_factory() for _ in range(n_basis)])
 
+model = FunctionEncoder(basis_functions).to(device)
+
+# Train model
 
 epochs = 1000
 batch_size = 50
@@ -118,8 +118,12 @@ dataloader = DataLoader(
 )
 dataloader_iter = iter(dataloader)
 
-fig, ax = plt.subplots()
-plt.show(block=False)
+plot_progress_every_n = None  # e.g. 50
+if plot_progress_every_n is not None:
+    fig, ax = plt.subplots()
+    plt.show(block=False)
+    plt.draw()
+    plt.pause(0.1)
 
 with tqdm.trange(epochs) as tqdm_bar:
     for epoch in tqdm_bar:
@@ -136,8 +140,8 @@ with tqdm.trange(epochs) as tqdm_bar:
         pred = model((y0, dt), coefficients=coefficients)
 
         pred_loss = torch.nn.functional.mse_loss(pred, y1)
-        norm_loss = basis_normalization_loss(G)
-        loss = pred_loss + norm_loss
+        # norm_loss = basis_normalization_loss(G)
+        loss = pred_loss  # + norm_loss
 
         loss.backward()
 
@@ -147,49 +151,51 @@ with tqdm.trange(epochs) as tqdm_bar:
 
         tqdm_bar.set_postfix_str(f"loss: {loss.item():.2e}")
 
-        # if epoch % 10 == 0:
-        #     # Plot the evaluation trajectory.
-        #     ax.clear()
-        #     ax.set_xlim(-5, 5)
-        #     ax.set_ylim(-5, 5)
+        if plot_progress_every_n is not None and epoch % plot_progress_every_n == 0:
+            # Plot the evaluation trajectory.
+            ax.clear()
+            ax.set_xlim(-5, 5)
+            ax.set_ylim(-5, 5)
 
-        #     with torch.no_grad():
-        #         model.eval()
+            with torch.no_grad():
+                model.eval()
 
-        #         # Plot a single trajectory using the data from the first batch
-        #         _mu = mu[0]
-        #         _y0 = torch.empty(1, 2, device=device).uniform_(
-        #             *dataloader.dataset.y0_range
-        #         )
-        #         _c = coefficients[0].unsqueeze(0)
+                # Plot a single trajectory using the data from the first batch
+                _mu = mu[0]
+                _y0 = torch.empty(1, 2, device=device).uniform_(
+                    *dataloader.dataset.y0_range
+                )
+                _c = coefficients[0].unsqueeze(0)
 
-        #         n = int(10 / 0.1)
-        #         _dt = torch.tensor([0.1], device=device)
+                n = int(10 / 0.1)
+                _dt = torch.tensor([0.1], device=device)
 
-        #         x = _y0.clone()
-        #         y = [x]
-        #         for i in range(n):
-        #             x = rk4_step(van_der_pol, x, _dt, mu=_mu)
-        #             y.append(x)
-        #         y = torch.cat(y, dim=0)
-        #         y = y.detach().cpu().numpy()
+                x = _y0.clone()
+                y = [x]
+                for i in range(n):
+                    x = rk4_step(van_der_pol, x, _dt, mu=_mu)
+                    y.append(x)
+                y = torch.cat(y, dim=0)
+                y = y.detach().cpu().numpy()
 
-        #         x = _y0.clone()
-        #         x = x.unsqueeze(1)
-        #         _dt = _dt.unsqueeze(0)
-        #         pred = [x]
-        #         for i in range(n):
-        #             x = model((x, _dt), coefficients=_c)
-        #             pred.append(x)
-        #         pred = torch.cat(pred, dim=1)
-        #         pred = pred.detach().cpu().numpy()
+                x = _y0.clone()
+                x = x.unsqueeze(1)
+                _dt = _dt.unsqueeze(0)
+                pred = [x]
+                for i in range(n):
+                    x = model((x, _dt), coefficients=_c)
+                    pred.append(x)
+                pred = torch.cat(pred, dim=1)
+                pred = pred.detach().cpu().numpy()
 
-        #         ax.plot(y[:, 0], y[:, 1])
-        #         ax.plot(pred[0, :, 0], pred[0, :, 1], label="Neural ODE")
+                ax.plot(y[:, 0], y[:, 1])
+                ax.plot(pred[0, :, 0], pred[0, :, 1], label="Neural ODE")
 
-        #         plt.draw()
-        #         plt.pause(0.1)
+                plt.draw()
+                plt.pause(0.1)
 
+if plot_progress_every_n is not None:
+    plt.close()
 
 # Save the model
 torch.save(model.state_dict(), "examples/van_der_pol_model.pth")
@@ -241,9 +247,16 @@ with torch.no_grad():
 
             ax[i, j].set_xlim(-5, 5)
             ax[i, j].set_ylim(-5, 5)
-            ax[i, j].plot(y[:, 0], y[:, 1], label="True")
-            ax[i, j].plot(pred[0, :, 0], pred[0, :, 1], label="Neural ODE")
-            ax[i, j].legend()
+            (_t,) = ax[i, j].plot(y[:, 0], y[:, 1], label="True")
+            (_p,) = ax[i, j].plot(pred[0, :, 0], pred[0, :, 1], label="Predicted")
+
+    fig.legend(
+        handles=[_t, _p],
+        loc="outside upper center",
+        bbox_to_anchor=(0.5, 0.95),
+        ncol=2,
+        frameon=False,
+    )
 
     plt.show()
     plt.savefig("examples/van_der_pol.png")
