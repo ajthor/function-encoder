@@ -97,10 +97,10 @@ def basis_factory():
     )
 
 
-# Create model
-
 n_basis = 10
 basis_functions = BasisFunctions(*[basis_factory() for _ in range(n_basis)])
+
+# Create model
 
 model = FunctionEncoder(basis_functions).to(device)
 
@@ -170,6 +170,7 @@ with tqdm.trange(epochs) as tqdm_bar:
                 n = int(10 / 0.1)
                 _dt = torch.tensor([0.1], device=device)
 
+                # Integrate the true trajectory
                 x = _y0.clone()
                 y = [x]
                 for i in range(n):
@@ -178,6 +179,7 @@ with tqdm.trange(epochs) as tqdm_bar:
                 y = torch.cat(y, dim=0)
                 y = y.detach().cpu().numpy()
 
+                # Integrate the predicted trajectory
                 x = _y0.clone()
                 x = x.unsqueeze(1)
                 _dt = _dt.unsqueeze(0)
@@ -204,6 +206,7 @@ torch.save(model.state_dict(), "examples/van_der_pol_model.pth")
 with torch.no_grad():
     model.eval()
 
+    # Generate a single batch of functions for plotting
     dataloader = DataLoader(
         VanDerPolDataset(n_points=n_points, n_example_points=n_example_points),
         batch_size=9,
@@ -212,6 +215,7 @@ with torch.no_grad():
     batch = next(dataloader_iter)
 
     mu, y0, dt, y1, y0_example, dt_example, y1_example = batch
+    # Precompute the coefficients for the batch
     coefficients, G = model.compute_coefficients((y0_example, dt_example), y1_example)
 
     fig, ax = plt.subplots(3, 3, figsize=(10, 10))
@@ -219,14 +223,17 @@ with torch.no_grad():
     for i in range(3):
         for j in range(3):
 
+            # Plot a single trajectory
             _mu = mu[i * 3 + j]
             _y0 = torch.empty(1, 2, device=device).uniform_(
                 *dataloader.dataset.y0_range
             )
+            # We use the coefficients that we computed before
             _c = coefficients[i * 3 + j].unsqueeze(0)
             n = int(10 / 0.1)
             _dt = torch.tensor([0.1], device=device)
 
+            # Integrate the true trajectory
             x = _y0.clone()
             y = [x]
             for k in range(n):
@@ -235,6 +242,7 @@ with torch.no_grad():
             y = torch.cat(y, dim=0)
             y = y.detach().cpu().numpy()
 
+            # Integrate the predicted trajectory
             x = _y0.clone()
             x = x.unsqueeze(1)
             _dt = _dt.unsqueeze(0)
