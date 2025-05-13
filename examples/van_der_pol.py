@@ -4,8 +4,6 @@ import torch
 import torch.nn as nn
 from torch.utils.data import IterableDataset, DataLoader
 
-from torchdiffeq import odeint
-
 from function_encoder.coefficients import least_squares
 from function_encoder.inner_products import standard_inner_product
 
@@ -35,7 +33,7 @@ def rk4_step(func, x, dt, **ode_kwargs):
     k2 = func(t + dt / 2, x + (dt / 2).unsqueeze(-1) * k1, **ode_kwargs)
     k3 = func(t + dt / 2, x + (dt / 2).unsqueeze(-1) * k2, **ode_kwargs)
     k4 = func(t + dt, x + dt.unsqueeze(-1) * k3, **ode_kwargs)
-    return x + (dt / 6).unsqueeze(-1) * (k1 + 2 * k2 + 2 * k3 + k4)
+    return (dt / 6).unsqueeze(-1) * (k1 + 2 * k2 + 2 * k3 + k4)
 
 
 def van_der_pol(t, x, mu=1.0):
@@ -174,7 +172,7 @@ with tqdm.trange(epochs) as tqdm_bar:
                 x = _y0.clone()
                 y = [x]
                 for i in range(n):
-                    x = rk4_step(van_der_pol, x, _dt, mu=_mu)
+                    x = rk4_step(van_der_pol, x, _dt, mu=_mu) + x
                     y.append(x)
                 y = torch.cat(y, dim=0)
                 y = y.detach().cpu().numpy()
@@ -185,7 +183,7 @@ with tqdm.trange(epochs) as tqdm_bar:
                 _dt = _dt.unsqueeze(0)
                 pred = [x]
                 for i in range(n):
-                    x = model((x, _dt), coefficients=_c)
+                    x = model((x, _dt), coefficients=_c) + x
                     pred.append(x)
                 pred = torch.cat(pred, dim=1)
                 pred = pred.detach().cpu().numpy()
@@ -237,7 +235,7 @@ with torch.no_grad():
             x = _y0.clone()
             y = [x]
             for k in range(n):
-                x = rk4_step(van_der_pol, x, _dt, mu=_mu)
+                x = rk4_step(van_der_pol, x, _dt, mu=_mu) + x
                 y.append(x)
             y = torch.cat(y, dim=0)
             y = y.detach().cpu().numpy()
@@ -248,7 +246,7 @@ with torch.no_grad():
             _dt = _dt.unsqueeze(0)
             pred = [x]
             for k in range(n):
-                x = model((x, _dt), coefficients=_c)
+                x = model((x, _dt), coefficients=_c) + x
                 pred.append(x)
             pred = torch.cat(pred, dim=1)
             pred = pred.detach().cpu().numpy()
