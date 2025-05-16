@@ -18,7 +18,7 @@ import matplotlib.pyplot as plt
 import tqdm
 
 if torch.cuda.is_available():
-    device = "cuda:5"
+    device = "cuda"
 elif torch.backends.mps.is_available():
     device = "mps"
 else:
@@ -264,6 +264,5 @@ with torch.no_grad():
         frameon=False,
     )
 
-    plt.show()
     plt.savefig("examples/van_der_pol.png")
     plt.close()

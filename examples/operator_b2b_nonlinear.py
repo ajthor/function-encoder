@@ -32,14 +32,14 @@ dataloader = DataLoader(ds["train"], batch_size=50)
 # Create models
 
 input_basis_functions = MultiHeadedMLP(layer_sizes=[1, 32, 1], num_heads=8)
-input_function_encoder = FunctionEncoder(input_basis_functions)
+input_function_encoder = FunctionEncoder(input_basis_functions).to(device)
 
 
 output_basis_functions = MultiHeadedMLP(layer_sizes=[1, 32, 1], num_heads=8)
-output_function_encoder = FunctionEncoder(output_basis_functions)
+output_function_encoder = FunctionEncoder(output_basis_functions).to(device)
 
 
-operator = MLP(layer_sizes=[8, 32, 8], activation=torch.nn.ReLU())
+operator = MLP(layer_sizes=[8, 32, 8], activation=torch.nn.ReLU()).to(device)
 
 
 # Train model
@@ -51,11 +51,11 @@ def input_loss_function(model, batch):
     X = X.unsqueeze(-1)  # Fix for 1D input
     y = y.unsqueeze(-1)  # Fix for 1D input
 
-    coefficients = model.compute_coefficients(X, y)
+    coefficients, G = model.compute_coefficients(X, y)
     y_pred = model(X, coefficients)
 
     pred_loss = torch.nn.functional.mse_loss(y_pred, y)
-    norm_loss = basis_normalization_loss(model.basis_functions(X))
+    norm_loss = basis_normalization_loss(G)
 
     return pred_loss + norm_loss
 
@@ -74,11 +74,11 @@ def output_loss_function(model, batch):
     X = X.unsqueeze(-1)  # Fix for 1D input
     y = y.unsqueeze(-1)  # Fix for 1D input
 
-    coefficients = model.compute_coefficients(X, y)
+    coefficients, G = model.compute_coefficients(X, y)
     y_pred = model(X, coefficients)
 
     pred_loss = torch.nn.functional.mse_loss(y_pred, y)
-    norm_loss = basis_normalization_loss(model.basis_functions(X))
+    norm_loss = basis_normalization_loss(G)
 
     return pred_loss + norm_loss
 
@@ -101,7 +101,7 @@ def operator_loss_function(model, batch):
     Y = Y.unsqueeze(-1)  # Fix for 1D input
     Tf = Tf.unsqueeze(-1)  # Fix for 1D input
 
-    input_coefficients = input_function_encoder.compute_coefficients(X, f)
+    input_coefficients, _ = input_function_encoder.compute_coefficients(X, f)
     output_coefficients = model(input_coefficients)
 
     Tf_pred = output_function_encoder(Y, output_coefficients)
@@ -144,7 +144,7 @@ f = f.unsqueeze(-1).unsqueeze(0)
 Y = Y.unsqueeze(-1).unsqueeze(0)
 Tf = Tf.unsqueeze(-1).unsqueeze(0)
 
-input_coefficients = input_function_encoder.compute_coefficients(X, f)
+input_coefficients, _ = input_function_encoder.compute_coefficients(X, f)
 output_coefficients = operator(input_coefficients)
 
 Tf_pred = output_function_encoder(Y, output_coefficients)

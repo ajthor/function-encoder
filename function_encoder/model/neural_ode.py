@@ -53,10 +53,10 @@ class NeuralODE(torch.nn.Module):
         Args:
             inputs (tuple): A tuple containing (y0, t), where:
                 y0 (torch.Tensor): Initial condition
-                t (torch.Tensor): Time points at which to return the solution
+                dt (torch.Tensor): Time step
             ode_kwargs (dict, optional): Additional integrator arguments. Defaults to {}.
 
         Returns:
-            torch.Tensor: Solution of the ODE at the requested time points
+            torch.Tensor: Solution of the ODE at the next time step.
         """
         return self.integrator(self.ode_func, *inputs, **ode_kwargs)
