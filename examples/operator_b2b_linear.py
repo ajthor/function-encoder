@@ -56,8 +56,8 @@ def input_loss_function(model, batch):
     return pred_loss + norm_loss
 
 
-input_optimizer = torch.optim.Adam(input_function_encoder.parameters(), lr=1e-3)
 num_epochs = 1000
+input_optimizer = torch.optim.Adam(input_function_encoder.parameters(), lr=1e-3)
 with tqdm.tqdm(range(num_epochs)) as tqdm_bar:
     for epoch in tqdm_bar:
         batch = next(iter(dataloader))
@@ -84,8 +84,8 @@ def output_loss_function(model, batch):
     return pred_loss + norm_loss
 
 
-output_optimizer = torch.optim.Adam(output_function_encoder.parameters(), lr=1e-3)
 num_epochs = 1000
+output_optimizer = torch.optim.Adam(output_function_encoder.parameters(), lr=1e-3)
 with tqdm.tqdm(range(num_epochs)) as tqdm_bar:
     for epoch in tqdm_bar:
         batch = next(iter(dataloader))

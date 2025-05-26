@@ -39,7 +39,6 @@ num_basis = 8
 basis_functions = BasisFunctions(basis_function_factory())
 
 model = FunctionEncoder(basis_functions).to(device)
-optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
 
 # Train model
 
@@ -62,6 +61,7 @@ def loss_function(model, batch):
 
 # Train the first basis function
 num_epochs = 1000
+optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
 with tqdm.tqdm(range(num_epochs), desc=f"basis 1/{num_basis}") as tqdm_bar:
     for epoch in tqdm_bar:
         batch = next(dataloader_iter)

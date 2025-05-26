@@ -44,7 +44,6 @@ n_basis = 10
 basis_functions = BasisFunctions(*[basis_factory() for _ in range(n_basis)])
 
 model = FunctionEncoder(basis_functions).to(device)
-optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
 
 # Train model
 
@@ -67,6 +66,7 @@ def loss_function(model, batch):
 
 
 num_epochs = 1000
+optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
 with tqdm.trange(num_epochs) as tqdm_bar:
     for epoch in tqdm_bar:
         batch = next(dataloader_iter)

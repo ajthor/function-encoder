@@ -30,11 +30,9 @@ dataloader_iter = iter(dataloader)
 
 # Create model
 
-# basis_functions = BasisFunctions(*[MLP(layer_sizes=[1, 32, 1]) for _ in range(8)])
 basis_functions = MultiHeadedMLP(layer_sizes=[1, 32, 1], num_heads=8)
 
 model = FunctionEncoder(basis_functions).to(device)
-optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
 
 # Train model
 
@@ -56,6 +54,7 @@ def loss_function(model, batch):
 
 
 num_epochs = 1000
+optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
 with tqdm.tqdm(range(num_epochs)) as tqdm_bar:
     for epoch in tqdm_bar:
         batch = next(dataloader_iter)
