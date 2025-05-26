@@ -12,16 +12,26 @@ def polyval(coefficients, X):
 
 def polyder(coefficients):
     """Compute the coefficients of the derivative of a polynomial."""
-    degree = len(coefficients) - 1
-    return torch.tensor([coefficients[i] * (degree - i) for i in range(degree)])
+    degree = coefficients.size(0) - 1
+    powers = torch.arange(
+        degree, 0, -1, dtype=coefficients.dtype, device=coefficients.device
+    )
+    return coefficients[:-1] * powers
 
 
 def polyint(coefficients):
     """Compute the coefficients of the antiderivative of a polynomial, constant of integration set to zero."""
-    degree = len(coefficients) - 1
-    new_coeffs = [coefficients[i] / (degree - i + 1) for i in range(degree + 1)]
-    new_coeffs.append(torch.tensor(0.0, dtype=coefficients.dtype))
-    return torch.stack(new_coeffs)
+    degree = coefficients.size(0) - 1
+    powers = torch.arange(
+        degree + 1, 0, -1, dtype=coefficients.dtype, device=coefficients.device
+    )
+    integrated = coefficients / powers
+    return torch.cat(
+        [
+            integrated,
+            torch.tensor([0.0], dtype=coefficients.dtype, device=coefficients.device),
+        ]
+    )
 
 
 class DerivativeOperatorDataset(IterableDataset):

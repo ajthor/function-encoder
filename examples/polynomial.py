@@ -3,10 +3,10 @@ import torch
 from torch.utils.data import DataLoader
 from datasets.polynomial import PolynomialDataset
 
-from function_encoder.model.mlp import MLP, MultiHeadedMLP
-from function_encoder.function_encoder import BasisFunctions, FunctionEncoder
+from function_encoder.model.mlp import MultiHeadedMLP
+from function_encoder.function_encoder import FunctionEncoder
 from function_encoder.losses import basis_normalization_loss
-from function_encoder.utils.training import fit, train_step
+from function_encoder.utils.training import train_step
 
 import tqdm
 from tqdm import trange
@@ -31,9 +31,7 @@ dataloader_iter = iter(dataloader)
 # Create model
 
 # basis_functions = BasisFunctions(*[MLP(layer_sizes=[1, 32, 1]) for _ in range(8)])
-basis_functions = MultiHeadedMLP(
-    layer_sizes=[1, 32, 1], num_heads=8, activation=torch.nn.Tanh()
-)
+basis_functions = MultiHeadedMLP(layer_sizes=[1, 32, 1], num_heads=8)
 
 model = FunctionEncoder(basis_functions).to(device)
 optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
@@ -80,6 +78,10 @@ with torch.no_grad():
     example_X = example_X.to(device)
     example_y = example_y.to(device)
 
+    idx = torch.argsort(X, dim=1, descending=False)
+    X = torch.gather(X, dim=1, index=idx)
+    y = torch.gather(y, dim=1, index=idx)
+
     coefficients, G = model.compute_coefficients(example_X, example_y)
     y_pred = model(X, coefficients)
 
@@ -91,8 +93,8 @@ with torch.no_grad():
     example_y = example_y.squeeze(0).cpu().numpy()
 
     fig, ax = plt.subplots()
-    ax.scatter(X, y, label="True")
-    ax.scatter(X, y_pred, label="Predicted")
+    ax.plot(X, y, label="True")
+    ax.plot(X, y_pred, label="Predicted")
     ax.scatter(example_X, example_y, label="Data", color="red")
     ax.legend()
     plt.show()

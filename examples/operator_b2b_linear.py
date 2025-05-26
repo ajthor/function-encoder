@@ -95,12 +95,13 @@ with tqdm.tqdm(range(num_epochs)) as tqdm_bar:
         tqdm_bar.set_postfix({"loss": f"{loss:.2e}"})
 
 
-# Train the oeprator
-XTX = torch.zeros((8, 8), device=device)
-XTY = torch.zeros((8, 8), device=device)
-
-num_epochs = 100
+# Train the operator
 with torch.no_grad():
+    # Compute the normal equations in chunks
+    XTX = torch.zeros((8, 8), device=device)
+    XTY = torch.zeros((8, 8), device=device)
+
+    num_epochs = 100
     with tqdm.tqdm(range(num_epochs)) as tqdm_bar:
         for epoch in tqdm_bar:
             # Get a batch from the dataloader
@@ -125,7 +126,7 @@ with torch.no_grad():
                 example_Y, example_s
             )
 
-            # Compute the normal equations in chunks
+            # Update the normal equations
             XTX += torch.einsum("bk,bl->kl", input_coefficients, input_coefficients)
             XTY += torch.einsum("bk,bl->kl", input_coefficients, output_coefficients)
 
