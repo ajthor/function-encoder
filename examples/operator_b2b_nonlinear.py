@@ -1,13 +1,12 @@
 import torch
 
-from datasets import load_dataset
-
 from torch.utils.data import DataLoader
+from datasets.derivative_operator import DerivativeOperatorDataset
 
 from function_encoder.model.mlp import MLP, MultiHeadedMLP
-from function_encoder.function_encoder import BasisFunctions, FunctionEncoder
+from function_encoder.function_encoder import FunctionEncoder
 from function_encoder.losses import basis_normalization_loss
-from function_encoder.utils.training import fit
+from function_encoder.utils.training import train_step
 
 import tqdm
 
@@ -20,13 +19,11 @@ elif torch.backends.mps.is_available():
 else:
     device = "cpu"
 
-
 # Load dataset
 
-ds = load_dataset("ajthor/derivative_polynomial")
-ds = ds.with_format("torch", device=device)
-
-dataloader = DataLoader(ds["train"], batch_size=50)
+dataset = DerivativeOperatorDataset(n_points=100, n_example_points=10)
+dataloader = DataLoader(dataset, batch_size=50)
+dataloader_iter = iter(dataloader)
 
 
 # Create models
@@ -47,123 +44,138 @@ operator = MLP(layer_sizes=[8, 32, 8], activation=torch.nn.ReLU()).to(device)
 
 # Train the input function encoder
 def input_loss_function(model, batch):
-    X, y = batch["X"].to(device), batch["f"].to(device)
-    X = X.unsqueeze(-1)  # Fix for 1D input
-    y = y.unsqueeze(-1)  # Fix for 1D input
+    X, u, _, _, example_X, example_u, _, _ = batch
+    X = X.to(device)
+    u = u.to(device)
+    example_X = example_X.to(device)
+    example_u = example_u.to(device)
 
-    coefficients, G = model.compute_coefficients(X, y)
-    y_pred = model(X, coefficients)
+    coefficients, G = model.compute_coefficients(example_X, example_u)
+    u_pred = model(X, coefficients)
 
-    pred_loss = torch.nn.functional.mse_loss(y_pred, y)
+    pred_loss = torch.nn.functional.mse_loss(u_pred, u)
     norm_loss = basis_normalization_loss(G)
 
     return pred_loss + norm_loss
 
 
-input_function_encoder = fit(
-    model=input_function_encoder,
-    ds=dataloader,
-    loss_function=input_loss_function,
-    epochs=1000,
-)
+input_optimizer = torch.optim.Adam(input_function_encoder.parameters(), lr=1e-3)
+num_epochs = 1000
+with tqdm.tqdm(range(num_epochs)) as tqdm_bar:
+    for epoch in tqdm_bar:
+        batch = next(iter(dataloader))
+        loss = train_step(
+            input_function_encoder, input_optimizer, batch, input_loss_function
+        )
+        tqdm_bar.set_postfix({"loss": f"{loss:.2e}"})
 
 
 # Train the output function encoder
 def output_loss_function(model, batch):
-    X, y = batch["Y"].to(device), batch["Tf"].to(device)
-    X = X.unsqueeze(-1)  # Fix for 1D input
-    y = y.unsqueeze(-1)  # Fix for 1D input
+    _, _, Y, s, _, _, example_Y, example_s = batch
+    Y = Y.to(device)
+    s = s.to(device)
+    example_Y = example_Y.to(device)
+    example_s = example_s.to(device)
 
-    coefficients, G = model.compute_coefficients(X, y)
-    y_pred = model(X, coefficients)
+    coefficients, G = model.compute_coefficients(example_Y, example_s)
+    s_pred = model(Y, coefficients)
 
-    pred_loss = torch.nn.functional.mse_loss(y_pred, y)
+    pred_loss = torch.nn.functional.mse_loss(s_pred, s)
     norm_loss = basis_normalization_loss(G)
 
     return pred_loss + norm_loss
 
 
-output_function_encoder = fit(
-    model=output_function_encoder,
-    ds=dataloader,
-    loss_function=output_loss_function,
-    epochs=1000,
-)
+output_optimizer = torch.optim.Adam(output_function_encoder.parameters(), lr=1e-3)
+num_epochs = 1000
+with tqdm.tqdm(range(num_epochs)) as tqdm_bar:
+    for epoch in tqdm_bar:
+        batch = next(iter(dataloader))
+        loss = train_step(
+            output_function_encoder, output_optimizer, batch, output_loss_function
+        )
+        tqdm_bar.set_postfix({"loss": f"{loss:.2e}"})
 
 
 # Train the oeprator
 def operator_loss_function(model, batch):
-    X, f = batch["X"].to(device), batch["f"].to(device)
-    Y, Tf = batch["Y"].to(device), batch["Tf"].to(device)
+    _, _, Y, s, example_X, example_u, _, _ = batch
+    Y = Y.to(device)
+    s = s.to(device)
+    example_X = example_X.to(device)
+    example_u = example_u.to(device)
 
-    X = X.unsqueeze(-1)  # Fix for 1D input
-    f = f.unsqueeze(-1)  # Fix for 1D input
-    Y = Y.unsqueeze(-1)  # Fix for 1D input
-    Tf = Tf.unsqueeze(-1)  # Fix for 1D input
-
-    input_coefficients, _ = input_function_encoder.compute_coefficients(X, f)
+    input_coefficients, _ = input_function_encoder.compute_coefficients(
+        example_X, example_u
+    )
     output_coefficients = model(input_coefficients)
 
-    Tf_pred = output_function_encoder(Y, output_coefficients)
-
-    pred_loss = torch.nn.functional.mse_loss(Tf_pred, Tf)
+    s_pred = output_function_encoder(Y, output_coefficients)
+    pred_loss = torch.nn.functional.mse_loss(s_pred, s)
 
     return pred_loss
 
 
-operator = fit(
-    model=operator,
-    ds=dataloader,
-    loss_function=operator_loss_function,
-    epochs=1000,
-)
+operator_optimizer = torch.optim.Adam(operator.parameters(), lr=1e-3)
+num_epochs = 1000
+with tqdm.tqdm(range(num_epochs)) as tqdm_bar:
+    for epoch in tqdm_bar:
+        batch = next(iter(dataloader))
+        loss = train_step(operator, operator_optimizer, batch, operator_loss_function)
+        tqdm_bar.set_postfix({"loss": f"{loss:.2e}"})
 
 
 # Plot
 
+
+import matplotlib.pyplot as plt
+
 input_function_encoder.eval()
 output_function_encoder.eval()
+operator.eval()
+with torch.no_grad():
+    dataloader = DataLoader(dataset, batch_size=1)
+    batch = next(iter(dataloader))
 
-point = ds["train"].take(1)[0]
+    X, u, Y, s, example_X, example_u, example_Y, example_s = batch
+    X = X.to(device)
+    u = u.to(device)
+    Y = Y.to(device)
+    s = s.to(device)
+    example_X = example_X.to(device)
+    example_u = example_u.to(device)
+    example_Y = example_Y.to(device)
+    example_s = example_s.to(device)
 
-X = point["X"]
-f = point["f"]
-Y = point["Y"]
-Tf = point["Tf"]
+    idx = torch.argsort(X, dim=1, descending=False)
+    X = torch.gather(X, dim=1, index=idx)
+    u = torch.gather(u, dim=1, index=idx)
 
-idx = torch.argsort(X, dim=0).squeeze()
-X = X[idx]
-f = f[idx]
+    idx = torch.argsort(Y, dim=1, descending=False)
+    Y = torch.gather(Y, dim=1, index=idx)
+    s = torch.gather(s, dim=1, index=idx)
 
-idx = torch.argsort(Y, dim=0).squeeze()
-Y = Y[idx]
-Tf = Tf[idx]
+    input_coefficients, _ = input_function_encoder.compute_coefficients(X, u)
+    output_coefficients = operator(input_coefficients)
 
-X = X.unsqueeze(-1).unsqueeze(0)
-f = f.unsqueeze(-1).unsqueeze(0)
-Y = Y.unsqueeze(-1).unsqueeze(0)
-Tf = Tf.unsqueeze(-1).unsqueeze(0)
+    s_pred = output_function_encoder(Y, output_coefficients)
 
-input_coefficients, _ = input_function_encoder.compute_coefficients(X, f)
-output_coefficients = operator(input_coefficients)
+    # Detach from device and squeeze
+    X = X.squeeze().cpu().detach().numpy()
+    u = u.squeeze().cpu().detach().numpy()
+    Y = Y.squeeze().cpu().detach().numpy()
+    s = s.squeeze().cpu().detach().numpy()
+    s_pred = s_pred.squeeze().cpu().detach().numpy()
 
-Tf_pred = output_function_encoder(Y, output_coefficients)
+    fig = plt.figure()
+    ax = fig.add_subplot(111)
 
-# Detach from device and squeeze
-X = X.squeeze().cpu().detach().numpy()
-f = f.squeeze().cpu().detach().numpy()
-Y = Y.squeeze().cpu().detach().numpy()
-Tf = Tf.squeeze().cpu().detach().numpy()
-Tf_pred = Tf_pred.squeeze().cpu().detach().numpy()
+    ax.plot(X, u, label="Original")
+    ax.scatter(X, u, label="Data", color="red")
 
-fig = plt.figure()
-ax = fig.add_subplot(111)
+    ax.plot(Y, s, label="True")
+    ax.plot(Y, s_pred, label="Prediction")
 
-ax.plot(X, f, label="Original")
-ax.scatter(X, f, label="Data", color="red")
-
-ax.plot(Y, Tf, label="True")
-ax.plot(Y, Tf_pred, label="Prediction")
-
-plt.legend()
-plt.show()
+    plt.legend()
+    plt.show()

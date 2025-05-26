@@ -4,8 +4,8 @@ from torch.utils.data import IterableDataset
 
 def polyval(coefficients, X):
     """Evaluate a polynomial at X using Horner's method."""
-    y = coefficients[-1] * torch.ones_like(X)
-    for c in reversed(coefficients[:-1]):
+    y = torch.zeros_like(X)
+    for c in coefficients:
         y = y * X + c
     return y
 

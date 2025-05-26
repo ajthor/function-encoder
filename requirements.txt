@@ -1,4 +1,3 @@
-datasets
 torch
 matplotlib
 tqdm
