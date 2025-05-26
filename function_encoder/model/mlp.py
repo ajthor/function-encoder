@@ -7,14 +7,14 @@ class MLP(torch.nn.Module):
 
     Args:
         layer_sizes (List[int]): List of layer sizes, including input and output dimensions
-        activation (Callable, optional): Activation function to use between layers. Defaults to torch.nn.Tanh().
+        activation (Callable, optional): Activation function to use between layers. Defaults to torch.nn.ReLU().
         bias (bool, optional): Whether to include bias in linear layers. Defaults to True.
     """
 
     def __init__(
         self,
         layer_sizes: List[int],
-        activation: Union[torch.nn.Module, Callable] = torch.nn.Tanh(),
+        activation: Union[torch.nn.Module, Callable] = torch.nn.ReLU(),
         bias: bool = True,
     ):
         super(MLP, self).__init__()
@@ -51,7 +51,7 @@ class MultiHeadedMLP(torch.nn.Module):
     Args:
         layer_sizes (List[int]): List of layer sizes, including input and output dimensions
         num_heads (int): Number of output heads to produce
-        activation (Callable, optional): Activation function to use between layers. Defaults to torch.nn.Tanh().
+        activation (Callable, optional): Activation function to use between layers. Defaults to torch.nn.ReLU().
         bias (bool, optional): Whether to include bias in linear layers. Defaults to True.
     """
 
@@ -59,7 +59,7 @@ class MultiHeadedMLP(torch.nn.Module):
         self,
         layer_sizes: List[int],
         num_heads: int,
-        activation: Union[torch.nn.Module, Callable] = torch.nn.Tanh(),
+        activation: Union[torch.nn.Module, Callable] = torch.nn.ReLU(),
         bias: bool = True,
     ):
         super(MultiHeadedMLP, self).__init__()

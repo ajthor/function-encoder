@@ -1,17 +1,16 @@
 import torch
 
-from datasets import load_dataset
-
 from torch.utils.data import DataLoader
+from datasets.polynomial import PolynomialDataset
 
 from function_encoder.model.mlp import MLP, MultiHeadedMLP
 from function_encoder.function_encoder import BasisFunctions, FunctionEncoder
 from function_encoder.losses import basis_normalization_loss
-from function_encoder.utils.training import fit
+from function_encoder.utils.training import fit, train_step
 
 import tqdm
+from tqdm import trange
 
-import matplotlib.pyplot as plt
 
 if torch.cuda.is_available():
     device = "cuda"
@@ -20,34 +19,36 @@ elif torch.backends.mps.is_available():
 else:
     device = "cpu"
 
+
+torch.manual_seed(42)
+
 # Load dataset
 
-ds = load_dataset("ajthor/polynomial")
-ds = ds.with_format("torch", device=device)
-
-dataloader = DataLoader(ds["train"], batch_size=50)
-
-
-# Create basis functions
-
-# basis_functions = BasisFunctions([MLP(layer_sizes=[1, 32, 1]) for _ in range(8)])
-basis_functions = MultiHeadedMLP(layer_sizes=[1, 32, 1], num_heads=8)
+dataset = PolynomialDataset(n_points=100, n_example_points=10)
+dataloader = DataLoader(dataset, batch_size=50)
+dataloader_iter = iter(dataloader)
 
 # Create model
 
-model = FunctionEncoder(basis_functions)
-model.to(device)
+# basis_functions = BasisFunctions(*[MLP(layer_sizes=[1, 32, 1]) for _ in range(8)])
+basis_functions = MultiHeadedMLP(
+    layer_sizes=[1, 32, 1], num_heads=8, activation=torch.nn.Tanh()
+)
 
+model = FunctionEncoder(basis_functions).to(device)
+optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
 
 # Train model
 
 
 def loss_function(model, batch):
-    X, y = batch["X"].to(device), batch["y"].to(device)
-    X = X.unsqueeze(-1)  # Fix for 1D input
-    y = y.unsqueeze(-1)  # Fix for 1D input
+    X, y, example_X, example_y = batch
+    X = X.to(device)
+    y = y.to(device)
+    example_X = example_X.to(device)
+    example_y = example_y.to(device)
 
-    coefficients, G = model.compute_coefficients(X, y)
+    coefficients, G = model.compute_coefficients(example_X, example_y)
     y_pred = model(X, coefficients)
 
     pred_loss = torch.nn.functional.mse_loss(y_pred, y)
@@ -56,36 +57,42 @@ def loss_function(model, batch):
     return pred_loss + norm_loss
 
 
-model = fit(model=model, ds=dataloader, loss_function=loss_function)
+num_epochs = 1000
+with tqdm.tqdm(range(num_epochs)) as tqdm_bar:
+    for epoch in tqdm_bar:
+        batch = next(dataloader_iter)
+        loss = train_step(model, optimizer, batch, loss_function)
+        tqdm_bar.set_postfix({"loss": f"{loss:.2e}"})
 
 
-# Plot results
+# Plot an evaluation of the model
 
+import matplotlib.pyplot as plt
+
+model.eval()
 with torch.no_grad():
+    dataloader = DataLoader(dataset, batch_size=1)
+    batch = next(iter(dataloader))
 
-    point = ds["train"][0]
-    example_X = point["X"].unsqueeze(-1)  # Fix for 1D input
-    example_y = point["y"].unsqueeze(-1)  # Fix for 1D input
+    X, y, example_X, example_y = batch
+    X = X.to(device)
+    y = y.to(device)
+    example_X = example_X.to(device)
+    example_y = example_y.to(device)
 
-    # Add leading batch dimension
-    example_X = example_X.unsqueeze(0)
-    example_y = example_y.unsqueeze(0)
-
-    X = torch.linspace(-1, 1, 100)
-    X = X.unsqueeze(1)  # Fix for 1D input
-    X = X.unsqueeze(0)  # Add batch dimension
-    coefficients, _ = model.compute_coefficients(example_X, example_y)
+    coefficients, G = model.compute_coefficients(example_X, example_y)
     y_pred = model(X, coefficients)
 
-    fig = plt.figure()
-    ax = fig.add_subplot(111)
+    X = X.squeeze(0).cpu().numpy()
+    y_pred = y_pred.squeeze(0).cpu().numpy()
+    y = y.squeeze(0).cpu().numpy()
 
-    # Plot true function
-    ax.plot(example_X[0], example_y[0], label="True")
-    ax.scatter(example_X[0], example_y[0], label="Data", color="red")
+    example_X = example_X.squeeze(0).cpu().numpy()
+    example_y = example_y.squeeze(0).cpu().numpy()
 
-    ax.plot(X[0], y_pred[0], label="Prediction")
-
-    plt.legend()
-
+    fig, ax = plt.subplots()
+    ax.scatter(X, y, label="True")
+    ax.scatter(X, y_pred, label="Predicted")
+    ax.scatter(example_X, example_y, label="Data", color="red")
+    ax.legend()
     plt.show()

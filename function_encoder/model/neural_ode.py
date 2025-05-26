@@ -2,6 +2,16 @@ from typing import Callable, Optional, Tuple, Dict
 import torch
 
 
+def rk4_step(func, x, dt, **ode_kwargs):
+    """Runge-Kutta 4th order ODE integrator for a single step."""
+    t = torch.zeros_like(dt, device=dt.device)
+    k1 = func(t, x, **ode_kwargs)
+    k2 = func(t + dt / 2, x + (dt / 2).unsqueeze(-1) * k1, **ode_kwargs)
+    k3 = func(t + dt / 2, x + (dt / 2).unsqueeze(-1) * k2, **ode_kwargs)
+    k4 = func(t + dt, x + dt.unsqueeze(-1) * k3, **ode_kwargs)
+    return (dt / 6).unsqueeze(-1) * (k1 + 2 * k2 + 2 * k3 + k4)
+
+
 class ODEFunc(torch.nn.Module):
     """A wrapper for a PyTorch model to make it compatible with ODE solvers.
 
