@@ -24,24 +24,23 @@ torch.manual_seed(42)
 
 # Load dataset
 
-dataset = VanDerPolDataset(n_points=1000, n_example_points=100)
+dataset = VanDerPolDataset(n_points=1000, n_example_points=100, dt_range=(0.1, 0.1))
 dataloader = DataLoader(dataset, batch_size=50)
 dataloader_iter = iter(dataloader)
 
 # Create model
 
 
-def basis_factory():
-    return NeuralODE(
-        ode_func=ODEFunc(
-            model=MLP(layer_sizes=[2, 64, 64, 2], activation=torch.nn.ReLU())
-        ),
-        integrator=rk4_step,
-    )
-
-
 n_basis = 10
-basis_functions = BasisFunctions(*[basis_factory() for _ in range(n_basis)])
+basis_functions = BasisFunctions(
+    *[
+        NeuralODE(
+            ode_func=ODEFunc(model=MLP(layer_sizes=[3, 64, 64, 2])),
+            integrator=rk4_step,
+        )
+        for _ in range(n_basis)
+    ]
+)
 
 model = FunctionEncoder(basis_functions).to(device)
 
@@ -49,7 +48,7 @@ model = FunctionEncoder(basis_functions).to(device)
 
 
 def loss_function(model, batch):
-    mu, y0, dt, y1, y0_example, dt_example, y1_example = batch
+    _, y0, dt, y1, y0_example, dt_example, y1_example = batch
     y0 = y0.to(device)
     dt = dt.to(device)
     y1 = y1.to(device)
@@ -57,7 +56,7 @@ def loss_function(model, batch):
     dt_example = dt_example.to(device)
     y1_example = y1_example.to(device)
 
-    coefficients, G = model.compute_coefficients((y0_example, dt_example), y1_example)
+    coefficients, _ = model.compute_coefficients((y0_example, dt_example), y1_example)
     pred = model((y0, dt), coefficients=coefficients)
 
     pred_loss = torch.nn.functional.mse_loss(pred, y1)
@@ -71,37 +70,8 @@ with tqdm.trange(num_epochs) as tqdm_bar:
     for epoch in tqdm_bar:
         batch = next(dataloader_iter)
         loss = train_step(model, optimizer, batch, loss_function)
-        # model.train()
-        # optimizer.zero_grad()
-
-        # # mu, y0, dt, y1, y0_example, dt_example, y1_example = batch
-        # # y0 = y0.to(device)
-        # # dt = dt.to(device)
-        # # y1 = y1.to(device)
-        # # y0_example = y0_example.to(device)
-        # # dt_example = dt_example.to(device)
-        # # y1_example = y1_example.to(device)
-
-        # # coefficients, G = model.compute_coefficients(
-        # #     (y0_example, dt_example), y1_example
-        # # )
-        # # pred = model((y0, dt), coefficients=coefficients)
-
-        # # pred_loss = torch.nn.functional.mse_loss(pred, y1)
-        # # # norm_loss = basis_normalization_loss(G)
-        # # loss = pred_loss  # + norm_loss
-
-        # loss.backward()
-
-        # torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
-
-        # optimizer.step()
-
         tqdm_bar.set_postfix_str(f"loss: {loss:.2e}")
 
-
-# Save the model
-torch.save(model.state_dict(), "examples/van_der_pol_model.pth")
 
 # Plot a grid of evaluations
 
@@ -139,8 +109,9 @@ with torch.no_grad():
             )
             # We use the coefficients that we computed before
             _c = coefficients[i * 3 + j].unsqueeze(0)
-            n = int(10 / 0.1)
-            _dt = torch.tensor([0.1], device=device)
+            s = 0.1  # Time step for simulation
+            n = int(10 / s)
+            _dt = torch.tensor([s], device=device)
 
             # Integrate the true trajectory
             x = _y0.clone()
@@ -175,5 +146,4 @@ with torch.no_grad():
         frameon=False,
     )
 
-    plt.savefig("examples/van_der_pol.png")
-    plt.close()
+    plt.show()

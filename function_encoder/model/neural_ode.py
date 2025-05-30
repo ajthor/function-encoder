@@ -33,7 +33,8 @@ class ODEFunc(torch.nn.Module):
         Returns:
             torch.Tensor: The time derivative dx/dt at the current state
         """
-        return self.model(x)
+        tx = torch.cat([t.unsqueeze(-1), x], dim=-1)  # Concatenate time and state
+        return self.model(tx)
 
 
 class NeuralODE(torch.nn.Module):
