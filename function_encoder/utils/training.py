@@ -5,11 +5,12 @@ import tqdm
 
 
 def train_step(model, optimizer, batch, loss_function):
-    """Performs a single training step and returns the loss value."""
+    """Performs a single training step, clips grad norm, and returns the loss value."""
     model.train()
     optimizer.zero_grad()
     loss = loss_function(model, batch)
     loss.backward()
+    torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
     optimizer.step()
     return loss.item()
 

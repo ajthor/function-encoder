@@ -114,3 +114,117 @@ def gradient_descent(
         grad = torch.einsum("bkl,bl->bk", G, coefficients) - F
         coefficients = coefficients - learning_rate * grad
     return coefficients, G
+
+
+def recursive_least_squares_update(
+    g: torch.Tensor,
+    y: torch.Tensor,
+    P: torch.Tensor,
+    coefficients: torch.Tensor,
+    forgetting_factor: float = 0.99,
+    method: str = "woodbury",
+):
+    """Update coefficients using recursive least squares.
+
+    Args:
+        g (torch.Tensor): Basis functions evaluations [batch_size, n_points, n_features, n_basis]
+        y (torch.Tensor): Function evaluations [batch_size, n_points, n_features]
+        P (torch.Tensor): Covariance matrix [batch_size, n_basis, n_basis]
+        coefficients (torch.Tensor): Current coefficients [batch_size, n_basis]
+        forgetting_factor (float, optional): Forgetting factor for the update. Defaults to 0.99.
+        method (str, optional): Method for updating coefficients. Options are "woodbury", "qr", or "cholesky". Defaults to "woodbury".
+
+    Returns:
+        torch.Tensor: Updated coefficients [batch_size, n_basis]
+    """
+
+    match method:
+        case "woodbury":
+            return _rls_woodbury(g, y, P, coefficients, forgetting_factor)
+        case "qr":
+            return _rls_qr(g, y, P, coefficients, forgetting_factor)
+        case "cholesky":
+            return _rls_cholesky(g, y, P, coefficients, forgetting_factor)
+        case _:
+            raise ValueError(f"Unknown method: {method}")
+
+
+def _rls_woodbury(
+    g: torch.Tensor,
+    y: torch.Tensor,
+    P: torch.Tensor,
+    coefficients: torch.Tensor,
+    forgetting_factor: float = 0.99,
+):
+    """Standard RLS update using the Woodbury identity (vectorized over batch).
+
+    Args:
+        g (torch.Tensor): Feature vector [batch_size, n_points, n_features, n_basis]
+        y (torch.Tensor): Observation [batch_size, n_points, n_features]
+        P (torch.Tensor): Covariance matrix [batch_size, n_basis, n_basis]
+        coefficients (torch.Tensor): Current coefficient vector [batch_size, n_basis]
+        forgetting_factor (float): Forgetting factor (lambda)
+
+    Returns:
+        Tuple[torch.Tensor, torch.Tensor]: Updated coefficients and covariance P
+    """
+
+    g = g.squeeze(1)
+    y = y.squeeze(1)
+
+    # Compute residual
+    y_pred = torch.einsum("bdk,bk->bd", g, coefficients)
+    residual = y - y_pred  # [batch_size, n_features]
+
+    # Compute the Kalman gain
+    gTP = torch.einsum("bdk,bkl->bdl", g, P)
+    S = torch.einsum("bcl,bdk->bcd", gTP, g)
+    S += torch.eye(S.size(-1), device=S.device) * (forgetting_factor)
+
+    K = torch.linalg.solve(S, gTP)  # Kalman gain [batch_size, n_features, n_basis]
+
+    # Update the coefficients
+    coefficients += torch.einsum("bdk,bd->bk", K, residual)
+
+    # Update the covariance matrix using the Woodbury identity
+    P = P - torch.einsum("bdk,bdl->bkl", K, gTP)
+
+    P = P / forgetting_factor  # Scale the covariance matrix
+
+    return coefficients, P
+
+
+def _rls_qr(
+    g: torch.Tensor,
+    y: torch.Tensor,
+    L: torch.Tensor,
+    coefficients: torch.Tensor,
+    forgetting_factor: float = 0.99,
+):
+    """Simple RLS update using QR decomposition (vectorized over batch).
+
+    Args:
+        g (torch.Tensor): Feature vector [batch_size, n_points, n_features, n_basis]
+        y (torch.Tensor): Observation [batch_size, n_points, n_features]
+        L (torch.Tensor): Chjolesky factor of covariance matrix [batch_size, n_basis, n_basis]
+        coefficients (torch.Tensor): Current coefficient vector [batch_size, n_basis]
+        forgetting_factor (float): Forgetting factor (lambda)
+
+    Returns:
+        Tuple[torch.Tensor, torch.Tensor]: Updated coefficients and covariance L
+    """
+    raise NotImplementedError(
+        "Recursive least squares with QR decomposition is not implemented yet."
+    )
+
+
+def _rls_cholesky(
+    g: torch.Tensor,
+    y: torch.Tensor,
+    L: torch.Tensor,
+    coefficients: torch.Tensor,
+    forgetting_factor: float = 0.99,
+):
+    raise NotImplementedError(
+        "Recursive least squares with Cholesky decomposition is not implemented yet."
+    )
