@@ -1,5 +1,5 @@
 import torch
-
+import math
 
 def monte_carlo_integration(
     f: torch.Tensor, g: torch.Tensor, inner_product: callable
@@ -206,17 +206,57 @@ def _rls_qr(
     Args:
         g (torch.Tensor): Feature vector [batch_size, n_points, n_features, n_basis]
         y (torch.Tensor): Observation [batch_size, n_points, n_features]
-        L (torch.Tensor): Chjolesky factor of covariance matrix [batch_size, n_basis, n_basis]
+        L (torch.Tensor): Cholesky factor of covariance matrix [batch_size, n_basis, n_basis]
         coefficients (torch.Tensor): Current coefficient vector [batch_size, n_basis]
         forgetting_factor (float): Forgetting factor (lambda)
 
     Returns:
-        Tuple[torch.Tensor, torch.Tensor]: Updated coefficients and covariance L
+        Tuple[torch.Tensor, torch.Tensor]: Updated coefficients and covariance P
     """
-    raise NotImplementedError(
-        "Recursive least squares with QR decomposition is not implemented yet."
-    )
+    g = g.squeeze(1)
+    y = y.squeeze(1)
 
+    # Compute principal square root of forgetting_factor * I_{n_features}
+    mu = math.sqrt(forgetting_factor) * torch.eye(g.size(-2), device=g.device)
+    mu = torch.stack([mu] * g.size(0), dim=0)  # [batch_size, n_features, n_features]
+
+    # Form the block system [batch, n_features + n_basis, n_features + n_basis]
+    b = g.size(0)
+    d = g.size(-2) # n_features 
+    k = g.size(-1) # n_basis
+    LT = L.transpose(-1, -2)  # Cholesky factor transpose [batch_size, n_basis, n_basis]
+    LTg = torch.einsum("bck,bdk->bcd", LT, g)  # [batch_size, n_basis, n_features]
+    B = torch.zeros((b, d + k, d + k), device=g.device)
+    B[:, :d, :d] = mu
+    B[:, d:, :d] = LTg
+    B[:, d:, d:] = LT
+
+    # QR decomposition on block system
+    _, R = torch.linalg.qr(B, mode='reduced') # reduced for square B is the complete decomposition, but more efficient
+    # Extract blocks from the R matrix
+    R1 = R[:, :d, :d]  # upper left block [batch_size, n_features, n_features]
+    R1T = R[:, :d, :d].transpose(-1, -2)  # upper left block [batch_size, n_features, n_features]
+    R2 = R[:, :d, d:]  # upper right block [batch_size, n_features, n_basis]
+    R3 = R[:, d:, d:]  # lower right block [batch_size, n_basis, n_basis]
+    R3T = R3.transpose(-1, -2)
+
+    # Compute kalman gain R2T @ R1T^{-1}, use triangular solve for efficiency
+    K = torch.linalg.solve_triangular(R1T, R2, upper=False, left=True).transpose(-1, -2)  # [batch_size, n_basis, n_features]
+
+    # Compute residual
+    y_pred = torch.einsum("bdk,bk->bd", g, coefficients)
+    residual = y - y_pred  # [batch_size, n_features]
+
+    # Update coefficients
+    coefficients += torch.einsum("bkd,bd->bk", K, residual)
+
+    # Update the covariance matrix 
+    P = (1 / forgetting_factor) * torch.einsum("bck,bke->bce", R3T, R3)  # [batch_size, n_basis, n_basis]
+
+    # Innovation covariance... for fun...
+    S = torch.einsum("bdn,bnm->bdm", R1T, R1)
+
+    return coefficients, P
 
 def _rls_cholesky(
     g: torch.Tensor,
