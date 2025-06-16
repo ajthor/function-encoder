@@ -132,21 +132,18 @@ def recursive_least_squares_update(
         P (torch.Tensor): Covariance matrix [batch_size, n_basis, n_basis]
         coefficients (torch.Tensor): Current coefficients [batch_size, n_basis]
         forgetting_factor (float, optional): Forgetting factor for the update. Defaults to 0.99.
-        method (str, optional): Method for updating coefficients. Options are "woodbury", "qr", or "cholesky". Defaults to "woodbury".
+        method (str, optional): Method for updating coefficients. Options are "woodbury", "qr". Defaults to "woodbury".
 
     Returns:
         torch.Tensor: Updated coefficients [batch_size, n_basis]
     """
 
-    match method:
-        case "woodbury":
-            return _rls_woodbury(g, y, P, coefficients, forgetting_factor)
-        case "qr":
-            return _rls_qr(g, y, P, coefficients, forgetting_factor)
-        case "cholesky":
-            return _rls_cholesky(g, y, P, coefficients, forgetting_factor)
-        case _:
-            raise ValueError(f"Unknown method: {method}")
+    if method == "woodbury":
+        return _rls_woodbury(g, y, P, coefficients, forgetting_factor)
+    elif method == "qr":
+        return _rls_qr(g, y, P, coefficients, forgetting_factor)
+    else:
+        raise ValueError(f"Unknown method: {method}")
 
 
 def _rls_woodbury(
@@ -257,14 +254,3 @@ def _rls_qr(
     S = torch.einsum("bdn,bnm->bdm", R1T, R1)
 
     return coefficients, P
-
-def _rls_cholesky(
-    g: torch.Tensor,
-    y: torch.Tensor,
-    L: torch.Tensor,
-    coefficients: torch.Tensor,
-    forgetting_factor: float = 0.99,
-):
-    raise NotImplementedError(
-        "Recursive least squares with Cholesky decomposition is not implemented yet."
-    )
