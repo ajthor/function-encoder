@@ -70,7 +70,7 @@ class FunctionEncoder(torch.nn.Module):
         f = y
         g = self.basis_functions(x)
         if self.residual_function is not None:
-            f = f - self.residual_function(x)
+            f = f - self.residual_function(x).detach()
 
         coefficients, G = self.coefficients_method(f, g, self.inner_product)
 
@@ -89,5 +89,5 @@ class FunctionEncoder(torch.nn.Module):
         g = self.basis_functions(x)
         y = torch.einsum("bmdk,bk->bmd", g, coefficients)
         if self.residual_function is not None:
-            y = y + self.residual_function(x)
+            y = y + self.residual_function(x).detach()
         return y
