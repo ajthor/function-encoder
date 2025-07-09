@@ -83,23 +83,14 @@ with torch.no_grad():
             g = model.basis_functions((y0, dt))
 
             # Update the coefficients using recursive least squares
-            # coefficients, P = recursive_least_squares_update(
-            #     g=g,
-            #     y=y1,
-            #     P=P,
-            #     coefficients=coefficients,
-            #     forgetting_factor=1,
-            #     method="woodbury",
-            # )
-
             L = torch.linalg.cholesky(P)
             coefficients, P = recursive_least_squares_update(
-                method='qr',
                 g=g,
                 y=y1,
                 P=L,
                 coefficients=coefficients,
                 forgetting_factor=0.95,
+                method="qr",
             )
 
             # Generate a new batch of data for evaluation
