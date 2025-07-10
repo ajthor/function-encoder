@@ -1,6 +1,7 @@
 import torch
 import math
 
+
 def monte_carlo_integration(
     f: torch.Tensor, g: torch.Tensor, inner_product: callable
 ) -> torch.Tensor:
@@ -38,8 +39,9 @@ def least_squares(
     """
     F = inner_product(g, f.unsqueeze(-1)).squeeze(-1)
     G = inner_product(g, g)
-    G += regularization * torch.eye(G.size(-1), device=G.device)
-    coefficients = torch.linalg.solve(G, F)
+    coefficients = torch.linalg.solve(
+        G + regularization * torch.eye(G.size(-1), device=G.device), F
+    )
     return coefficients, G
 
 
@@ -219,8 +221,8 @@ def _rls_qr(
 
     # Form the block system [batch, n_features + n_basis, n_features + n_basis]
     b = g.size(0)
-    d = g.size(-2) # n_features 
-    k = g.size(-1) # n_basis
+    d = g.size(-2)  # n_features
+    k = g.size(-1)  # n_basis
     LT = L.transpose(-1, -2)  # Cholesky factor transpose [batch_size, n_basis, n_basis]
     LTg = torch.einsum("bck,bdk->bcd", LT, g)  # [batch_size, n_basis, n_features]
     B = torch.zeros((b, d + k, d + k), device=g.device)
@@ -229,16 +231,22 @@ def _rls_qr(
     B[:, d:, d:] = LT
 
     # QR decomposition on block system
-    _, R = torch.linalg.qr(B, mode='reduced') # reduced for square B is the complete decomposition, but more efficient
+    _, R = torch.linalg.qr(
+        B, mode="reduced"
+    )  # reduced for square B is the complete decomposition, but more efficient
     # Extract blocks from the R matrix
     R1 = R[:, :d, :d]  # upper left block [batch_size, n_features, n_features]
-    R1T = R[:, :d, :d].transpose(-1, -2)  # upper left block [batch_size, n_features, n_features]
+    R1T = R[:, :d, :d].transpose(
+        -1, -2
+    )  # upper left block [batch_size, n_features, n_features]
     R2 = R[:, :d, d:]  # upper right block [batch_size, n_features, n_basis]
     R3 = R[:, d:, d:]  # lower right block [batch_size, n_basis, n_basis]
     R3T = R3.transpose(-1, -2)
 
     # Compute kalman gain R2T @ R1T^{-1}, use triangular solve for efficiency
-    K = torch.linalg.solve_triangular(R1T, R2, upper=False, left=True).transpose(-1, -2)  # [batch_size, n_basis, n_features]
+    K = torch.linalg.solve_triangular(R1T, R2, upper=False, left=True).transpose(
+        -1, -2
+    )  # [batch_size, n_basis, n_features]
 
     # Compute residual
     y_pred = torch.einsum("bdk,bk->bd", g, coefficients)
@@ -247,8 +255,10 @@ def _rls_qr(
     # Update coefficients
     coefficients += torch.einsum("bkd,bd->bk", K, residual)
 
-    # Update the covariance matrix 
-    P = (1 / forgetting_factor) * torch.einsum("bck,bke->bce", R3T, R3)  # [batch_size, n_basis, n_basis]
+    # Update the covariance matrix
+    P = (1 / forgetting_factor) * torch.einsum(
+        "bck,bke->bce", R3T, R3
+    )  # [batch_size, n_basis, n_basis]
 
     # Innovation covariance... for fun...
     S = torch.einsum("bdn,bnm->bdm", R1T, R1)
