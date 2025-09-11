@@ -1,7 +1,7 @@
+from typing import Callable
+
 import torch
 from torch.utils.data import IterableDataset
-
-from function_encoder.model.neural_ode import rk4_step
 
 
 def van_der_pol(t, x, mu=1.0):
@@ -13,6 +13,7 @@ def van_der_pol(t, x, mu=1.0):
 class VanDerPolDataset(IterableDataset):
     def __init__(
         self,
+        integrator: Callable,
         n_points: int = 1000,
         n_example_points: int = 100,
         mu_range=(0.5, 2.5),
@@ -20,6 +21,7 @@ class VanDerPolDataset(IterableDataset):
         dt_range=(0.01, 0.1),
     ):
         super().__init__()
+        self.integrator = integrator
         self.n_points = n_points
         self.n_example_points = n_example_points
         self.mu_range = mu_range
@@ -36,7 +38,7 @@ class VanDerPolDataset(IterableDataset):
             # Generate random time steps
             _dt = torch.empty(total_points).uniform_(*self.dt_range)
             # Integrate one step
-            _y1 = rk4_step(van_der_pol, _y0, _dt, mu=mu)
+            _y1 = self.integrator(van_der_pol, _y0, _dt, mu=mu)
 
             # Split the data
             y0_example = _y0[: self.n_example_points]
