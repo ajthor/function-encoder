@@ -91,3 +91,30 @@ class FunctionEncoder(torch.nn.Module):
         if self.residual_function is not None:
             y = y + self.residual_function(x).detach()
         return y
+
+
+class FunctionEncoderFast(torch.nn.Module):
+    """
+    """
+
+    def __init__(
+        self,
+        basis_functions: torch.nn.Module,
+    ):
+        super(FunctionEncoderFast, self).__init__()
+        self.basis_functions = basis_functions
+
+
+    def forward(self, t:torch.Tensor, x: torch.Tensor, coefficients: torch.Tensor) -> torch.Tensor:
+        """Evaluate the function with the given coefficients at x.
+
+        Args:
+            x (torch.Tensor): Evaluation (query) points [batch_size, n_points, n_features]
+            coefficients (torch.Tensor): Coefficients of the basis functions [batch_size, n_basis]
+
+        Returns:
+            torch.Tensor: Function values at x [batch_size, n_points, n_features]
+        """
+        g = self.basis_functions(t, x)
+        y = torch.einsum("bmdk,bk->bmd", g, coefficients)
+        return y
