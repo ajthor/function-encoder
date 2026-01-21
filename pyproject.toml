@@ -1,12 +1,12 @@
 [build-system]
-requires = ["setuptools", "wheel"]
+requires = ["setuptools", "wheel", "setuptools_scm[toml]>=8.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "function_encoder"
-version = "0.0.1"
 description = "Function encoder implementation in PyTorch."
 readme = "README.md"
+dynamic = ["version"]
 
 dependencies = [
     "numpy>=2.2.2",
@@ -16,3 +16,8 @@ dependencies = [
 
 [project.optional-dependencies]
 jax = ["function-encoder-jax @ git+https://github.com/ajthor/function-encoder-jax.git"]
+
+[tool.setuptools_scm]
+version_scheme = "release-branch-semver"
+local_scheme = "no-local-version"
+fallback_version = "0.0.0"
