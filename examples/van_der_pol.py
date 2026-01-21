@@ -147,7 +147,3 @@ with torch.no_grad():
     )
 
     plt.show()
-
-    # save the model
-
-torch.save(model.state_dict(), "van_der_pol_model.pth")

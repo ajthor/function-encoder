@@ -3,7 +3,7 @@ import torch
 from torch.utils.data import DataLoader
 from datasets.polynomial import PolynomialDataset
 
-from function_encoder.model.mlp import MultiHeadedMLP, MLP
+from function_encoder.model.mlp import StackedMLP, MLP
 from function_encoder.function_encoder import FunctionEncoder
 from function_encoder.losses import basis_normalization_loss, residual_loss
 from function_encoder.utils.training import train_step
@@ -30,7 +30,7 @@ dataloader_iter = iter(dataloader)
 
 # Create model
 
-basis_functions = MultiHeadedMLP(layer_sizes=[1, 32, 1], num_heads=8)
+basis_functions = StackedMLP(layer_sizes=[1, 32, 32, 1], num_heads=8)
 residual_function = MLP(layer_sizes=[1, 32, 1])
 
 model = FunctionEncoder(basis_functions, residual_function=residual_function).to(device)

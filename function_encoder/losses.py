@@ -43,3 +43,32 @@ def residual_loss(
     """
     residual_pred = model.residual_function(inputs)
     return torch.nn.functional.mse_loss(residual_pred, targets)
+
+
+def matryoshka_loss(
+    model: torch.nn.Module,
+    inputs: torch.Tensor,
+    targets: torch.Tensor,
+    coefficients: torch.Tensor,
+    sizes: list[int],
+) -> torch.Tensor:
+    """Compute a Matryoshka loss by progressively truncating coefficients.
+
+    Args:
+        model (torch.nn.Module): Model with basis_functions for evaluation
+        inputs (torch.Tensor): Query points [batch_size, n_points, n_features]
+        targets (torch.Tensor): Target values [batch_size, n_points, n_features]
+        coefficients (torch.Tensor): Basis coefficients [batch_size, n_basis]
+        sizes (list[int]): Prefix sizes for truncating the coefficient vector
+
+    Returns:
+        torch.Tensor: Average mean squared error across the requested sizes
+    """
+    g_query = model.basis_functions(inputs)
+    total_loss = 0.0
+    for k in sizes:
+        coefficients_k = coefficients.clone()
+        coefficients_k[..., k:] = 0.0
+        y_pred = torch.einsum("bmdk,bk->bmd", g_query, coefficients_k)
+        total_loss = total_loss + torch.nn.functional.mse_loss(y_pred, targets)
+    return total_loss / len(sizes)

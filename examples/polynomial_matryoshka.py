@@ -6,7 +6,7 @@ from datasets.polynomial import PolynomialDataset
 
 from function_encoder.model.mlp import StackedMLP
 from function_encoder.function_encoder import FunctionEncoder
-from function_encoder.losses import basis_normalization_loss
+from function_encoder.losses import basis_normalization_loss, matryoshka_loss
 from function_encoder.utils.training import train_step
 
 import tqdm
@@ -31,11 +31,15 @@ dataloader_iter = iter(dataloader)
 
 # Create model
 
-basis_functions = StackedMLP(layer_sizes=[1, 32, 32, 1], num_heads=8)
+num_basis = 4
+
+basis_functions = StackedMLP(layer_sizes=[1, 64, 64, 1], num_heads=num_basis)
 
 model = FunctionEncoder(basis_functions).to(device)
 
 # Train model
+
+matryoshka_sizes = list(range(1, num_basis + 1))
 
 
 def loss_function(model, batch):
@@ -46,12 +50,8 @@ def loss_function(model, batch):
     example_y = example_y.to(device)
 
     coefficients, G = model.compute_coefficients(example_X, example_y)
-    y_pred = model(X, coefficients)
 
-    pred_loss = torch.nn.functional.mse_loss(y_pred, y)
-    norm_loss = basis_normalization_loss(G)
-
-    return pred_loss + norm_loss
+    return matryoshka_loss(model, X, y, coefficients, matryoshka_sizes)
 
 
 num_epochs = 1000
@@ -95,5 +95,13 @@ with torch.no_grad():
     ax.plot(X, y, label="True")
     ax.plot(X, y_pred, label="Predicted")
     ax.scatter(example_X, example_y, label="Data", color="red")
+    ax.legend()
+    plt.show()
+
+    basis_eval = model.basis_functions(torch.from_numpy(X).to(device).unsqueeze(0))
+    basis_eval = basis_eval.squeeze(0).squeeze(1).detach().cpu().numpy()
+    fig, ax = plt.subplots()
+    for i in range(basis_eval.shape[-1]):
+        ax.plot(X, basis_eval[:, i], label=f"Basis {i}")
     ax.legend()
     plt.show()
