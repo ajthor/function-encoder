@@ -6,7 +6,6 @@ from torch.utils.data import DataLoader
 
 from datasets.van_der_pol import VanDerPolDataset, van_der_pol
 
-from function_encoder.model.mlp import MLP
 from function_encoder.model.neural_ode import NeuralODE, ODEFunc, rk4_step
 from function_encoder.function_encoder import BasisFunctions, FunctionEncoder
 from function_encoder.utils.training import train_step
@@ -28,19 +27,27 @@ dataset = VanDerPolDataset(n_points=1000, n_example_points=100, dt_range=(0.1, 0
 dataloader = DataLoader(dataset, batch_size=50)
 dataloader_iter = iter(dataloader)
 
+
 # Create model
 
 
+def basis_function_factory():
+    return NeuralODE(
+        ode_func=ODEFunc(
+            model=torch.nn.Sequential(
+                torch.nn.Linear(3, 64),
+                torch.nn.ReLU(),
+                torch.nn.Linear(64, 64),
+                torch.nn.ReLU(),
+                torch.nn.Linear(64, 2),
+            )
+        ),
+        integrator=rk4_step,
+    )
+
+
 n_basis = 10
-basis_functions = BasisFunctions(
-    *[
-        NeuralODE(
-            ode_func=ODEFunc(model=MLP(layer_sizes=[3, 64, 64, 2])),
-            integrator=rk4_step,
-        )
-        for _ in range(n_basis)
-    ]
-)
+basis_functions = BasisFunctions(*[basis_function_factory() for _ in range(n_basis)])
 
 model = FunctionEncoder(basis_functions).to(device)
 
@@ -146,4 +153,4 @@ with torch.no_grad():
         frameon=False,
     )
 
-    plt.show()
+    plt.savefig("van_der_pol_evaluation.png", bbox_inches="tight")

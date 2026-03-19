@@ -3,13 +3,15 @@ import torch
 from torch.utils.data import DataLoader
 from datasets.polynomial import PolynomialDataset
 
-from function_encoder.model.mlp import StackedMLP, MLP
+from function_encoder.model.tensor_layers import ParallelLinear
 from function_encoder.function_encoder import FunctionEncoder
 from function_encoder.losses import basis_normalization_loss, residual_loss
 from function_encoder.utils.training import train_step
 
 import tqdm
 from tqdm import trange
+
+import matplotlib.pyplot as plt
 
 
 if torch.cuda.is_available():
@@ -30,10 +32,25 @@ dataloader_iter = iter(dataloader)
 
 # Create model
 
-basis_functions = StackedMLP(layer_sizes=[1, 32, 32, 1], num_heads=8)
-residual_function = MLP(layer_sizes=[1, 32, 1])
+n_basis = 8
+basis_functions = torch.nn.Sequential(
+    ParallelLinear(n_basis, 1, 32),
+    torch.nn.ReLU(),
+    ParallelLinear(n_basis, 32, 32),
+    torch.nn.ReLU(),
+    ParallelLinear(n_basis, 32, 1),
+)
 
-model = FunctionEncoder(basis_functions, residual_function=residual_function).to(device)
+residual_function = torch.nn.Sequential(
+    torch.nn.Linear(1, 32),
+    torch.nn.ReLU(),
+    torch.nn.Linear(32, 32),
+    torch.nn.ReLU(),
+    torch.nn.Linear(32, 1),
+)
+
+model = FunctionEncoder(
+    basis_functions, residual_function=residual_function).to(device)
 
 # Train model
 
@@ -66,7 +83,8 @@ with tqdm.tqdm(range(num_epochs)) as tqdm_bar:
 
 # Plot an evaluation of the model
 
-import matplotlib.pyplot as plt
+print(matplotlib.get_backend())
+matplotlib.use("TkAgg")
 
 model.eval()
 with torch.no_grad():

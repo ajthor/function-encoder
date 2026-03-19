@@ -3,11 +3,11 @@ import torch
 from torch.utils.data import DataLoader
 from datasets.polynomial import PolynomialDataset
 
-from function_encoder.model.mlp import MLP
 from function_encoder.function_encoder import BasisFunctions, FunctionEncoder
 from function_encoder.losses import basis_normalization_loss
 from function_encoder.utils.training import train_step
 
+import matplotlib.pyplot as plt
 
 import tqdm
 
@@ -31,7 +31,11 @@ dataloader_iter = iter(dataloader)
 
 
 def basis_function_factory():
-    return MLP(layer_sizes=[1, 32, 1])
+    return torch.nn.Sequential(
+        torch.nn.Linear(1, 32),
+        torch.nn.ReLU(),
+        torch.nn.Linear(32, 1),
+    )
 
 
 num_basis = 10
@@ -54,7 +58,8 @@ def compute_explained_variance(model):
     example_y = example_y.to(device)
     coefficients, G = model.compute_coefficients(example_X, example_y)
 
-    coefficients_centered = coefficients - coefficients.mean(dim=0, keepdim=True)
+    coefficients_centered = coefficients - \
+        coefficients.mean(dim=0, keepdim=True)
     coefficients_cov = (
         torch.matmul(coefficients_centered.T, coefficients_centered)
         / coefficients.shape[0]
@@ -138,7 +143,6 @@ for k in range(num_basis - 1):
 
 # Plot results
 
-import matplotlib.pyplot as plt
 
 model.eval()
 with torch.no_grad():
@@ -181,7 +185,8 @@ with torch.no_grad():
         if i >= num_basis or i >= len(axes):
             break
         basis_output = basis_fn(X_plot)
-        axes[i].plot(X_plot[0].cpu().numpy(), basis_output[0].detach().cpu().numpy())
+        axes[i].plot(X_plot[0].cpu().numpy(),
+                     basis_output[0].detach().cpu().numpy())
         axes[i].set_title(f"Basis Function {i+1}")
     plt.tight_layout()
     plt.show()

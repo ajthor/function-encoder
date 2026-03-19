@@ -3,13 +3,13 @@ import torch
 from torch.utils.data import DataLoader
 from datasets.polynomial import PolynomialDataset
 
-from function_encoder.model.mlp import MLP
 from function_encoder.function_encoder import BasisFunctions, FunctionEncoder
 from function_encoder.losses import basis_normalization_loss
 from function_encoder.utils.training import train_step
 
-
 import tqdm
+
+import matplotlib.pyplot as plt
 
 if torch.cuda.is_available():
     device = "cuda"
@@ -31,10 +31,14 @@ dataloader_iter = iter(dataloader)
 
 
 def basis_function_factory():
-    return MLP(layer_sizes=[1, 32, 1])
+    return torch.nn.Sequential(
+        torch.nn.Linear(1, 32),
+        torch.nn.ReLU(),
+        torch.nn.Linear(32, 1),
+    )
 
 
-num_basis = 8
+n_basis = 8
 # Only use one basis function initially for progressive training
 basis_functions = BasisFunctions(basis_function_factory())
 
@@ -62,14 +66,14 @@ def loss_function(model, batch):
 # Train the first basis function
 num_epochs = 1000
 optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
-with tqdm.tqdm(range(num_epochs), desc=f"basis 1/{num_basis}") as tqdm_bar:
+with tqdm.tqdm(range(num_epochs), desc=f"basis 1/{n_basis}") as tqdm_bar:
     for epoch in tqdm_bar:
         batch = next(dataloader_iter)
         loss = train_step(model, optimizer, batch, loss_function)
         tqdm_bar.set_postfix({"loss": f"{loss:.2e}"})
 
 # Train the remaining basis functions progressively
-for k in range(num_basis - 1):
+for k in range(n_basis - 1):
 
     # Freeze all existing parameters except the new basis function
     for param in model.parameters():
@@ -87,7 +91,7 @@ for k in range(num_basis - 1):
     trainable_params = [p for p in model.parameters() if p.requires_grad]
     optimizer = torch.optim.Adam(trainable_params, lr=1e-3)
 
-    with tqdm.tqdm(range(num_epochs), desc=f"basis {k + 2}/{num_basis}") as tqdm_bar:
+    with tqdm.tqdm(range(num_epochs), desc=f"basis {k + 2}/{n_basis}") as tqdm_bar:
         for epoch in tqdm_bar:
             batch = next(dataloader_iter)
             loss = train_step(model, optimizer, batch, loss_function)
@@ -95,7 +99,6 @@ for k in range(num_basis - 1):
 
 # Plot results
 
-import matplotlib.pyplot as plt
 
 model.eval()
 with torch.no_grad():
@@ -134,10 +137,11 @@ with torch.no_grad():
     axes = axes.flatten()
     X_plot = torch.linspace(-1, 1, 100).unsqueeze(1).unsqueeze(0).to(device)
     for i, basis_fn in enumerate(model.basis_functions.basis_functions):
-        if i >= num_basis:
+        if i >= n_basis:
             break
         basis_output = basis_fn(X_plot)
-        axes[i].plot(X_plot[0].cpu().numpy(), basis_output[0].detach().cpu().numpy())
+        axes[i].plot(X_plot[0].cpu().numpy(),
+                     basis_output[0].detach().cpu().numpy())
         axes[i].set_title(f"Basis Function {i+1}")
     plt.tight_layout()
     plt.show()

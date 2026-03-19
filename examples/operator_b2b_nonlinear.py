@@ -3,7 +3,7 @@ import torch
 from torch.utils.data import DataLoader
 from datasets.derivative_operator import DerivativeOperatorDataset
 
-from function_encoder.model.mlp import MLP, MultiHeadedMLP
+from function_encoder.model.tensor_layers import ParallelLinear
 from function_encoder.function_encoder import FunctionEncoder
 from function_encoder.losses import basis_normalization_loss
 from function_encoder.utils.training import train_step
@@ -28,15 +28,35 @@ dataloader_iter = iter(dataloader)
 
 # Create models
 
-input_basis_functions = MultiHeadedMLP(layer_sizes=[1, 32, 1], num_heads=8)
+n_basis = 8
+
+input_basis_functions = torch.nn.Sequential(
+    ParallelLinear(n_basis, 1, 32),
+    torch.nn.ReLU(),
+    ParallelLinear(n_basis, 32, 32),
+    torch.nn.ReLU(),
+    ParallelLinear(n_basis, 32, 1),
+)
 input_function_encoder = FunctionEncoder(input_basis_functions).to(device)
 
 
-output_basis_functions = MultiHeadedMLP(layer_sizes=[1, 32, 1], num_heads=8)
+output_basis_functions = torch.nn.Sequential(
+    ParallelLinear(n_basis, 1, 32),
+    torch.nn.ReLU(),
+    ParallelLinear(n_basis, 32, 32),
+    torch.nn.ReLU(),
+    ParallelLinear(n_basis, 32, 1),
+)
 output_function_encoder = FunctionEncoder(output_basis_functions).to(device)
 
 
-operator = MLP(layer_sizes=[8, 32, 8], activation=torch.nn.ReLU()).to(device)
+operator = torch.nn.Sequential(
+    torch.nn.Linear(n_basis, 32),
+    torch.nn.ReLU(),
+    torch.nn.Linear(32, 32),
+    torch.nn.ReLU(),
+    torch.nn.Linear(32, n_basis),
+).to(device)
 
 
 # Train model
@@ -60,7 +80,8 @@ def input_loss_function(model, batch):
 
 
 num_epochs = 1000
-input_optimizer = torch.optim.Adam(input_function_encoder.parameters(), lr=1e-3)
+input_optimizer = torch.optim.Adam(
+    input_function_encoder.parameters(), lr=1e-3)
 with tqdm.tqdm(range(num_epochs)) as tqdm_bar:
     for epoch in tqdm_bar:
         batch = next(iter(dataloader))
@@ -88,7 +109,8 @@ def output_loss_function(model, batch):
 
 
 num_epochs = 1000
-output_optimizer = torch.optim.Adam(output_function_encoder.parameters(), lr=1e-3)
+output_optimizer = torch.optim.Adam(
+    output_function_encoder.parameters(), lr=1e-3)
 with tqdm.tqdm(range(num_epochs)) as tqdm_bar:
     for epoch in tqdm_bar:
         batch = next(iter(dataloader))
@@ -122,14 +144,13 @@ operator_optimizer = torch.optim.Adam(operator.parameters(), lr=1e-3)
 with tqdm.tqdm(range(num_epochs)) as tqdm_bar:
     for epoch in tqdm_bar:
         batch = next(iter(dataloader))
-        loss = train_step(operator, operator_optimizer, batch, operator_loss_function)
+        loss = train_step(operator, operator_optimizer,
+                          batch, operator_loss_function)
         tqdm_bar.set_postfix({"loss": f"{loss:.2e}"})
 
 
 # Plot
 
-
-import matplotlib.pyplot as plt
 
 input_function_encoder.eval()
 output_function_encoder.eval()

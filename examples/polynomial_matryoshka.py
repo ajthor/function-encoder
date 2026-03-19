@@ -4,7 +4,7 @@ import torch
 from torch.utils.data import DataLoader
 from datasets.polynomial import PolynomialDataset
 
-from function_encoder.model.mlp import StackedMLP
+from function_encoder.model.tensor_layers import TensorLinear
 from function_encoder.function_encoder import FunctionEncoder
 from function_encoder.losses import basis_normalization_loss, matryoshka_loss
 from function_encoder.utils.training import train_step
@@ -31,15 +31,20 @@ dataloader_iter = iter(dataloader)
 
 # Create model
 
-num_basis = 4
-
-basis_functions = StackedMLP(layer_sizes=[1, 64, 64, 1], num_heads=num_basis)
+n_basis = 4
+basis_functions = torch.nn.Sequential(
+    TensorLinear(n_basis, 1, 64),
+    torch.nn.ReLU(),
+    TensorLinear(n_basis, 64, 64),
+    torch.nn.ReLU(),
+    TensorLinear(n_basis, 64, 1),
+)
 
 model = FunctionEncoder(basis_functions).to(device)
 
 # Train model
 
-matryoshka_sizes = list(range(1, num_basis + 1))
+matryoshka_sizes = list(range(1, n_basis + 1))
 
 
 def loss_function(model, batch):
@@ -98,7 +103,8 @@ with torch.no_grad():
     ax.legend()
     plt.show()
 
-    basis_eval = model.basis_functions(torch.from_numpy(X).to(device).unsqueeze(0))
+    basis_eval = model.basis_functions(
+        torch.from_numpy(X).to(device).unsqueeze(0))
     basis_eval = basis_eval.squeeze(0).squeeze(1).detach().cpu().numpy()
     fig, ax = plt.subplots()
     for i in range(basis_eval.shape[-1]):
