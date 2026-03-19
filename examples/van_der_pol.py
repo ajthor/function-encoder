@@ -153,4 +153,4 @@ with torch.no_grad():
         frameon=False,
     )
 
-    plt.savefig("van_der_pol_evaluation.png", bbox_inches="tight")
+    plt.show()
