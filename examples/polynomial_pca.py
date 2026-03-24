@@ -1,13 +1,13 @@
 import torch
 
 from torch.utils.data import DataLoader
-from datasets.polynomial import PolynomialDataset
+from data.polynomial import PolynomialDataset
 
-from function_encoder.model.mlp import MLP
 from function_encoder.function_encoder import BasisFunctions, FunctionEncoder
 from function_encoder.losses import basis_normalization_loss
 from function_encoder.utils.training import train_step
 
+import matplotlib.pyplot as plt
 
 import tqdm
 
@@ -31,7 +31,11 @@ dataloader_iter = iter(dataloader)
 
 
 def basis_function_factory():
-    return MLP(layer_sizes=[1, 32, 1])
+    return torch.nn.Sequential(
+        torch.nn.Linear(1, 32),
+        torch.nn.ReLU(),
+        torch.nn.Linear(32, 1),
+    )
 
 
 num_basis = 10
@@ -138,7 +142,6 @@ for k in range(num_basis - 1):
 
 # Plot results
 
-import matplotlib.pyplot as plt
 
 model.eval()
 with torch.no_grad():

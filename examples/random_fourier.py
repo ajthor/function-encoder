@@ -1,17 +1,22 @@
-import matplotlib.pyplot as plt
+import math
 import torch
 
 from torch.utils.data import DataLoader
-from data.polynomial import PolynomialDataset
+from data.random_fourier import RandomFourierDataset
 
-from function_encoder.model.tensor_layers import TensorLinear
+from function_encoder.model.activations import Sine, init_siren
+from function_encoder.model.tensor_layers import ParallelLinear
 from function_encoder.function_encoder import FunctionEncoder
-from function_encoder.losses import basis_normalization_loss, matryoshka_loss
+from function_encoder.losses import (
+    basis_normalization_loss,
+    matryoshka_loss,
+    basis_orthonormality_loss,
+)
 from function_encoder.utils.training import train_step
 
 import tqdm
-from tqdm import trange
 
+import matplotlib.pyplot as plt
 
 if torch.cuda.is_available():
     device = "cuda"
@@ -25,19 +30,23 @@ torch.manual_seed(42)
 
 # Load dataset
 
-dataset = PolynomialDataset(n_points=100, n_example_points=10)
+dataset = RandomFourierDataset(
+    n_points=1000,
+    n_example_points=100,
+    frequencies=(2.0, 4.0, 6.0, 8.0, 20.0),
+)
 dataloader = DataLoader(dataset, batch_size=50)
 dataloader_iter = iter(dataloader)
 
 # Create model
 
-n_basis = 4
+n_basis = 8
 basis_functions = torch.nn.Sequential(
-    TensorLinear(n_basis, 1, 64),
-    torch.nn.ReLU(),
-    TensorLinear(n_basis, 64, 64),
-    torch.nn.ReLU(),
-    TensorLinear(n_basis, 64, 1),
+    init_siren(ParallelLinear(n_basis, 1, 64), layer_idx=0),
+    Sine(omega_0=30.0),
+    init_siren(ParallelLinear(n_basis, 64, 64), layer_idx=1),
+    Sine(omega_0=30.0),
+    init_siren(ParallelLinear(n_basis, 64, 1), layer_idx=2),
 )
 
 model = FunctionEncoder(basis_functions).to(device)
@@ -55,8 +64,11 @@ def loss_function(model, batch):
     example_y = example_y.to(device)
 
     coefficients, G = model.compute_coefficients(example_X, example_y)
+    norm_loss = basis_orthonormality_loss(G, device=device)
+    pred_loss = matryoshka_loss(model, X, y, coefficients, matryoshka_sizes)
+    # pred_loss = torch.nn.functional.mse_loss(model(X, coefficients), y)
 
-    return matryoshka_loss(model, X, y, coefficients, matryoshka_sizes)
+    return pred_loss + norm_loss
 
 
 num_epochs = 1000
@@ -101,12 +113,19 @@ with torch.no_grad():
     ax.plot(X, y_pred, label="Predicted")
     ax.scatter(example_X, example_y, label="Data", color="red")
     ax.legend()
-    plt.show()
+    plt.savefig("random_fourier.png")
 
     basis_eval = model.basis_functions(torch.from_numpy(X).to(device).unsqueeze(0))
     basis_eval = basis_eval.squeeze(0).squeeze(1).detach().cpu().numpy()
-    fig, ax = plt.subplots()
+
+    n_cols = 2
+    n_rows = math.ceil(basis_eval.shape[-1] / n_cols)
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(10, 3 * n_rows))
+    axes = axes.flatten()
     for i in range(basis_eval.shape[-1]):
-        ax.plot(X, basis_eval[:, i], label=f"Basis {i}")
-    ax.legend()
-    plt.show()
+        axes[i].plot(X, basis_eval[:, i])
+        axes[i].set_title(f"Basis {i}")
+    for i in range(basis_eval.shape[-1], len(axes)):
+        axes[i].axis("off")
+    plt.tight_layout()
+    plt.savefig("random_fourier_basis.png")

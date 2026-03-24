@@ -1,10 +1,9 @@
-import matplotlib.pyplot as plt
 import torch
 
 from torch.utils.data import DataLoader
-from datasets.polynomial import PolynomialDataset
+from data.polynomial import PolynomialDataset
 
-from function_encoder.model.mlp import StackedMLP
+from function_encoder.model.tensor_layers import ParallelLinear
 from function_encoder.function_encoder import FunctionEncoder
 from function_encoder.losses import basis_normalization_loss
 from function_encoder.utils.training import train_step
@@ -12,6 +11,7 @@ from function_encoder.utils.training import train_step
 import tqdm
 from tqdm import trange
 
+import matplotlib.pyplot as plt
 
 if torch.cuda.is_available():
     device = "cuda"
@@ -31,7 +31,14 @@ dataloader_iter = iter(dataloader)
 
 # Create model
 
-basis_functions = StackedMLP(layer_sizes=[1, 32, 32, 1], num_heads=8)
+n_basis = 8
+basis_functions = torch.nn.Sequential(
+    ParallelLinear(n_basis, 1, 32),
+    torch.nn.ReLU(),
+    ParallelLinear(n_basis, 32, 32),
+    torch.nn.ReLU(),
+    ParallelLinear(n_basis, 32, 1),
+)
 
 model = FunctionEncoder(basis_functions).to(device)
 

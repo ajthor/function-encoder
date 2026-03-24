@@ -1,12 +1,12 @@
+import matplotlib.pyplot as plt
 from typing import Callable, Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 
-from datasets.van_der_pol import VanDerPolDataset, van_der_pol
+from data.van_der_pol import VanDerPolDataset, van_der_pol
 
-from function_encoder.model.mlp import MLP
 from function_encoder.model.neural_ode import NeuralODE, ODEFunc, rk4_step
 from function_encoder.function_encoder import BasisFunctions, FunctionEncoder
 from function_encoder.utils.training import train_step
@@ -33,24 +33,29 @@ dataloader_iter = iter(dataloader)
 # Create model
 
 
+def basis_function_factory():
+    return NeuralODE(
+        ode_func=ODEFunc(
+            model=torch.nn.Sequential(
+                torch.nn.Linear(3, 64),
+                torch.nn.ReLU(),
+                torch.nn.Linear(64, 64),
+                torch.nn.ReLU(),
+                torch.nn.Linear(64, 2),
+            )
+        ),
+        integrator=rk4_step,
+    )
+
+
 n_basis = 10
-basis_functions = BasisFunctions(
-    *[
-        NeuralODE(
-            ode_func=ODEFunc(model=MLP(layer_sizes=[3, 64, 64, 2])),
-            integrator=rk4_step,
-        )
-        for _ in range(n_basis)
-    ]
-)
+basis_functions = BasisFunctions(*[basis_function_factory() for _ in range(n_basis)])
 
 model = FunctionEncoder(basis_functions).to(device)
 model.load_state_dict(torch.load("van_der_pol_model.pth", map_location=device))
 
 
 # Evaluate model
-
-import matplotlib.pyplot as plt
 
 
 model.eval()

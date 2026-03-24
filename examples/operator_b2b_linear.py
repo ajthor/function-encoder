@@ -1,9 +1,10 @@
+import matplotlib.pyplot as plt
 import torch
 
 from torch.utils.data import DataLoader
-from datasets.derivative_operator import DerivativeOperatorDataset
+from data.derivative_operator import DerivativeOperatorDataset
 
-from function_encoder.model.mlp import MultiHeadedMLP
+from function_encoder.model.tensor_layers import ParallelLinear
 from function_encoder.function_encoder import FunctionEncoder
 from function_encoder.losses import basis_normalization_loss
 from function_encoder.utils.training import train_step
@@ -28,11 +29,23 @@ dataloader_iter = iter(dataloader)
 
 # Create models
 
-input_basis_functions = MultiHeadedMLP(layer_sizes=[1, 32, 1], num_heads=8)
+input_basis_functions = torch.nn.Sequential(
+    ParallelLinear(8, 1, 32),
+    torch.nn.ReLU(),
+    ParallelLinear(8, 32, 32),
+    torch.nn.ReLU(),
+    ParallelLinear(8, 32, 1),
+)
 input_function_encoder = FunctionEncoder(input_basis_functions).to(device)
 
 
-output_basis_functions = MultiHeadedMLP(layer_sizes=[1, 32, 1], num_heads=8)
+output_basis_functions = torch.nn.Sequential(
+    ParallelLinear(8, 1, 32),
+    torch.nn.ReLU(),
+    ParallelLinear(8, 32, 32),
+    torch.nn.ReLU(),
+    ParallelLinear(8, 32, 1),
+)
 output_function_encoder = FunctionEncoder(output_basis_functions).to(device)
 
 
@@ -138,7 +151,6 @@ with torch.no_grad():
 
 # Plot
 
-import matplotlib.pyplot as plt
 
 input_function_encoder.eval()
 output_function_encoder.eval()
