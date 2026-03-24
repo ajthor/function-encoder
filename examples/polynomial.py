@@ -1,7 +1,7 @@
 import torch
 
 from torch.utils.data import DataLoader
-from datasets.polynomial import PolynomialDataset
+from data.polynomial import PolynomialDataset
 
 from function_encoder.model.tensor_layers import ParallelLinear
 from function_encoder.function_encoder import FunctionEncoder

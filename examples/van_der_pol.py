@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 
-from datasets.van_der_pol import VanDerPolDataset, van_der_pol
+from data.van_der_pol import VanDerPolDataset, van_der_pol
 
 from function_encoder.model.neural_ode import NeuralODE, ODEFunc, rk4_step
 from function_encoder.function_encoder import BasisFunctions, FunctionEncoder

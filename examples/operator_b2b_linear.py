@@ -2,7 +2,7 @@ import matplotlib.pyplot as plt
 import torch
 
 from torch.utils.data import DataLoader
-from datasets.derivative_operator import DerivativeOperatorDataset
+from data.derivative_operator import DerivativeOperatorDataset
 
 from function_encoder.model.tensor_layers import ParallelLinear
 from function_encoder.function_encoder import FunctionEncoder
@@ -70,8 +70,7 @@ def input_loss_function(model, batch):
 
 
 num_epochs = 1000
-input_optimizer = torch.optim.Adam(
-    input_function_encoder.parameters(), lr=1e-3)
+input_optimizer = torch.optim.Adam(input_function_encoder.parameters(), lr=1e-3)
 with tqdm.tqdm(range(num_epochs)) as tqdm_bar:
     for epoch in tqdm_bar:
         batch = next(iter(dataloader))
@@ -99,8 +98,7 @@ def output_loss_function(model, batch):
 
 
 num_epochs = 1000
-output_optimizer = torch.optim.Adam(
-    output_function_encoder.parameters(), lr=1e-3)
+output_optimizer = torch.optim.Adam(output_function_encoder.parameters(), lr=1e-3)
 with tqdm.tqdm(range(num_epochs)) as tqdm_bar:
     for epoch in tqdm_bar:
         batch = next(iter(dataloader))
@@ -142,10 +140,8 @@ with torch.no_grad():
             )
 
             # Update the normal equations
-            XTX += torch.einsum("bk,bl->kl",
-                                input_coefficients, input_coefficients)
-            XTY += torch.einsum("bk,bl->kl",
-                                input_coefficients, output_coefficients)
+            XTX += torch.einsum("bk,bl->kl", input_coefficients, input_coefficients)
+            XTY += torch.einsum("bk,bl->kl", input_coefficients, output_coefficients)
 
         XTX += 1e-6 * torch.eye(8, device=device)  # Regularization term
 
@@ -182,8 +178,7 @@ with torch.no_grad():
     s = torch.gather(s, dim=1, index=idx)
 
     input_coefficients, _ = input_function_encoder.compute_coefficients(X, u)
-    output_coefficients = torch.einsum(
-        "bk,kl->bl", input_coefficients, operator)
+    output_coefficients = torch.einsum("bk,kl->bl", input_coefficients, operator)
 
     s_pred = output_function_encoder(Y, output_coefficients)
 

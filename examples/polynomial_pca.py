@@ -1,7 +1,7 @@
 import torch
 
 from torch.utils.data import DataLoader
-from datasets.polynomial import PolynomialDataset
+from data.polynomial import PolynomialDataset
 
 from function_encoder.function_encoder import BasisFunctions, FunctionEncoder
 from function_encoder.losses import basis_normalization_loss
@@ -58,8 +58,7 @@ def compute_explained_variance(model):
     example_y = example_y.to(device)
     coefficients, G = model.compute_coefficients(example_X, example_y)
 
-    coefficients_centered = coefficients - \
-        coefficients.mean(dim=0, keepdim=True)
+    coefficients_centered = coefficients - coefficients.mean(dim=0, keepdim=True)
     coefficients_cov = (
         torch.matmul(coefficients_centered.T, coefficients_centered)
         / coefficients.shape[0]
@@ -185,8 +184,7 @@ with torch.no_grad():
         if i >= num_basis or i >= len(axes):
             break
         basis_output = basis_fn(X_plot)
-        axes[i].plot(X_plot[0].cpu().numpy(),
-                     basis_output[0].detach().cpu().numpy())
+        axes[i].plot(X_plot[0].cpu().numpy(), basis_output[0].detach().cpu().numpy())
         axes[i].set_title(f"Basis Function {i+1}")
     plt.tight_layout()
     plt.show()

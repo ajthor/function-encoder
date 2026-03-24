@@ -2,7 +2,7 @@ import matplotlib.pyplot as plt
 import torch
 
 from torch.utils.data import DataLoader
-from datasets.polynomial import PolynomialDataset
+from data.polynomial import PolynomialDataset
 
 from function_encoder.model.tensor_layers import TensorLinear
 from function_encoder.function_encoder import FunctionEncoder
@@ -103,8 +103,7 @@ with torch.no_grad():
     ax.legend()
     plt.show()
 
-    basis_eval = model.basis_functions(
-        torch.from_numpy(X).to(device).unsqueeze(0))
+    basis_eval = model.basis_functions(torch.from_numpy(X).to(device).unsqueeze(0))
     basis_eval = basis_eval.squeeze(0).squeeze(1).detach().cpu().numpy()
     fig, ax = plt.subplots()
     for i in range(basis_eval.shape[-1]):

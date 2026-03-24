@@ -2,7 +2,7 @@ import math
 import torch
 
 from torch.utils.data import DataLoader
-from datasets.random_fourier import RandomFourierDataset
+from data.random_fourier import RandomFourierDataset
 
 from function_encoder.model.activations import Sine, init_siren
 from function_encoder.model.tensor_layers import ParallelLinear

@@ -1,7 +1,7 @@
 import torch
 
 from torch.utils.data import DataLoader
-from datasets.polynomial import PolynomialDataset
+from data.polynomial import PolynomialDataset
 
 from function_encoder.function_encoder import BasisFunctions, FunctionEncoder
 from function_encoder.losses import basis_normalization_loss
@@ -140,8 +140,7 @@ with torch.no_grad():
         if i >= n_basis:
             break
         basis_output = basis_fn(X_plot)
-        axes[i].plot(X_plot[0].cpu().numpy(),
-                     basis_output[0].detach().cpu().numpy())
+        axes[i].plot(X_plot[0].cpu().numpy(), basis_output[0].detach().cpu().numpy())
         axes[i].set_title(f"Basis Function {i+1}")
     plt.tight_layout()
     plt.show()

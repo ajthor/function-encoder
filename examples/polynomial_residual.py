@@ -1,7 +1,7 @@
 import torch
 
 from torch.utils.data import DataLoader
-from datasets.polynomial import PolynomialDataset
+from data.polynomial import PolynomialDataset
 
 from function_encoder.model.tensor_layers import ParallelLinear
 from function_encoder.function_encoder import FunctionEncoder
@@ -49,8 +49,7 @@ residual_function = torch.nn.Sequential(
     torch.nn.Linear(32, 1),
 )
 
-model = FunctionEncoder(
-    basis_functions, residual_function=residual_function).to(device)
+model = FunctionEncoder(basis_functions, residual_function=residual_function).to(device)
 
 # Train model
 

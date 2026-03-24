@@ -1,7 +1,7 @@
 import torch
 
 from torch.utils.data import DataLoader
-from datasets.derivative_operator import DerivativeOperatorDataset
+from data.derivative_operator import DerivativeOperatorDataset
 
 from function_encoder.model.tensor_layers import ParallelLinear
 from function_encoder.function_encoder import FunctionEncoder
@@ -80,8 +80,7 @@ def input_loss_function(model, batch):
 
 
 num_epochs = 1000
-input_optimizer = torch.optim.Adam(
-    input_function_encoder.parameters(), lr=1e-3)
+input_optimizer = torch.optim.Adam(input_function_encoder.parameters(), lr=1e-3)
 with tqdm.tqdm(range(num_epochs)) as tqdm_bar:
     for epoch in tqdm_bar:
         batch = next(iter(dataloader))
@@ -109,8 +108,7 @@ def output_loss_function(model, batch):
 
 
 num_epochs = 1000
-output_optimizer = torch.optim.Adam(
-    output_function_encoder.parameters(), lr=1e-3)
+output_optimizer = torch.optim.Adam(output_function_encoder.parameters(), lr=1e-3)
 with tqdm.tqdm(range(num_epochs)) as tqdm_bar:
     for epoch in tqdm_bar:
         batch = next(iter(dataloader))
@@ -144,8 +142,7 @@ operator_optimizer = torch.optim.Adam(operator.parameters(), lr=1e-3)
 with tqdm.tqdm(range(num_epochs)) as tqdm_bar:
     for epoch in tqdm_bar:
         batch = next(iter(dataloader))
-        loss = train_step(operator, operator_optimizer,
-                          batch, operator_loss_function)
+        loss = train_step(operator, operator_optimizer, batch, operator_loss_function)
         tqdm_bar.set_postfix({"loss": f"{loss:.2e}"})
 
 
